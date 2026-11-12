@@ -43,7 +43,7 @@ export async function openPicker({ current = '', catalogId = null, title = 'コ�
       return [name.slice(0, i), h('mark', {}, name.slice(i, i + q.length)), name.slice(i + q.length)];
     }
     function draw() {
-      filter.el.classList.toggle('hidden', free || !all.some((c) => c.dan));
+      filter.el.classList.toggle('hidden', free || !all.some((c) => danLabel(c)));
       list.classList.toggle('hidden', free);
       note.textContent = free
         ? '入力した名前は、つぎからリストにも出てくるよ'
@@ -59,7 +59,7 @@ export async function openPicker({ current = '', catalogId = null, title = 'コ�
           c.catalogId ? thumb({ kind: 'coord', catalogId: c.catalogId }, i, { noImgText: false }) : null,
           h('div', { class: 'body' },
             h('div', { class: 'name' + (c.nameSource === 'catalog' ? '' : ' free-font') }, highlight(c.name)),
-            c.dan ? h('div', { class: 'meta' }, [danLabel(c), c.brand].filter(Boolean).join('・')) : null),
+            danLabel(c) ? h('div', { class: 'meta' }, [danLabel(c), c.brand].filter(Boolean).join('・')) : null),
           h('span', { class: 'radio', 'aria-hidden': 'true' })));
       list.replaceChildren(...(rows.length ? rows : [h('div', { class: 'empty' }, 'みつからなかったよ')]));
     }

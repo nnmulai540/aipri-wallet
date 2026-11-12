@@ -83,7 +83,7 @@ export default async function detail(ctx) {
         thumb(it, 0),
         h('div', { class: 'rows' },
           kv('しゅるい', KIND[it.kind]),
-          it.dan ? kv('だん', danLabel(it)) : null,
+          danLabel(it) ? kv('だん', danLabel(it)) : null,
           it.kind === 'friend' ? kv('コーデ', it.coordName || 'まだ', h('button', { class: 'link-btn', onclick: changeFriendCoord }, 'かえる')) : null,
           h('div', { class: 'spacer', style: 'min-height:12px' }),
           h('button', { class: 'fav-toggle', 'aria-pressed': String(!!it.favorite), onclick: async () => { it.favorite = !it.favorite; await saveIt(); draw(); } },

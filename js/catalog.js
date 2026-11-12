@@ -4,16 +4,19 @@ import { db } from './db.js';
 
 // ---- だんの表示 ----
 // ページ名（'oa4' / 'ring6' / '6'）の頭がシリーズ。数字だけは最初の「ひみつのアイプリ」
-export const SERIES = [['oa', 'おねがい'], ['ring', 'リング'], ['', 'ひみつ']];
+export const SERIES = [['oa', 'おねがい'], ['ring', 'リング'], ['', 'ひみつ'], ['card', 'カード']];
 const SERIES_NAME = { oa: 'おねがい', ring: 'リング', '': '' };
+// カードリストの、だんの無いページ（scraper/make_catalog.py の CARD_PAGES とそろえる）
+const CARD_PAGES = { special: 'スペシャル', gumi: 'グミ', millefeui: 'ミルフィー', spcardpack: 'SPカードパック' };
 
 function splitPage(key) {
   const m = /^([a-z]*)(\d+)$/.exec(key || '');
   return m ? { series: m[1], dan: Number(m[2]) } : null;
 }
 // コーデ（またはカタログの1件）のシリーズ。page が無い古いデータで dan だけあるときは最初のシリーズ扱い
-export const seriesOf = (it) => splitPage(it?.page)?.series ?? (it?.dan ? '' : null);
+export const seriesOf = (it) => (CARD_PAGES[it?.page] ? 'card' : splitPage(it?.page)?.series ?? (it?.dan ? '' : null));
 export function danLabel(it) {
+  if (CARD_PAGES[it?.page]) return CARD_PAGES[it.page];
   const p = splitPage(it?.page);
   if (p) return `${SERIES_NAME[p.series] ?? p.series}${p.dan}だん`;
   return it?.dan ? `${it.dan}だん` : '';
@@ -85,7 +88,7 @@ export async function importCatalog(file) {
   for (const u of imgCache.values()) if (u) URL.revokeObjectURL(u);
   imgCache.clear();
 
-  const items = meta.items.map(({ id, name, page, dan, brand, star, parts }) => ({ id, name, page, dan, brand, star, parts }));
+  const items = meta.items.map(({ id, name, page, dan, brand, star, parts, card }) => ({ id, name, page, dan, brand, star, parts, card }));
   await db.put('kv', { createdAt: meta.createdAt, importedAt: Date.now(), pages: meta.pages, items }, 'catalog');
 
   // 取り込む前に登録したコーデも、名前が公式リストと同じならカタログと結びつける（画像・だんが出るように）

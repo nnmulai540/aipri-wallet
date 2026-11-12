@@ -8,8 +8,12 @@ import { loadHeadingFont } from '../fonts.js';
 // 「おねがい1〜4だん・リング1〜6だん・1〜6だん」のように、シリーズごとにまとめて短く書く
 function pagesText(pages = []) {
   const m = new Map();
-  for (const p of pages) m.set(p.series, [...(m.get(p.series) || []), p.dan]);
-  return [...m].map(([s, ds]) => `${s}${Math.min(...ds)}〜${Math.max(...ds)}だん`).join('・');
+  const other = [];
+  for (const p of pages) {
+    if (p.dan == null) other.push(p.label); // カードリストのスペシャルなど、だんの無いもの
+    else m.set(p.series, [...(m.get(p.series) || []), p.dan]);
+  }
+  return [...[...m].map(([s, ds]) => `${s}${Math.min(...ds)}〜${Math.max(...ds)}だん`), ...other].join('・');
 }
 
 export default async function settings() {
