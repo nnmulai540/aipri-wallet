@@ -352,3 +352,8 @@ a { color: var(--main); }
   .pc-grid { grid-template-columns: minmax(0, 1fr); }
 }
 .set-btns label.field-label { display: flex; flex-direction: column; gap: 6px; margin: 0; }
+
+/* 一覧のならびかえ */
+.sort-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.sort-row .hint { margin: 0; }
+.sort-select { flex: 0 1 auto; min-height: 40px; font-size: 14px; padding: 0 10px; max-width: 60%; }

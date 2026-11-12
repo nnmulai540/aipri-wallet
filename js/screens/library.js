@@ -1,14 +1,34 @@
 // ④ 一覧（ならべる=3列 / リスト=1列 は設定で切り替え）。タップでQR表示、長押しで詳細・編集
-import { db, getSettings } from '../db.js';
+import { db, getSettings, setSettings } from '../db.js';
 import { partLabel } from '../qr.js';
 import { h, icon, go, header, thumb, onPress, nameClass, danFilter, LIST_TITLE } from '../ui.js';
-import { danLabel, preloadCatalogImgs } from '../catalog.js';
+import { danLabel, preloadCatalogImgs, seriesOf, getCatalog, SERIES } from '../catalog.js';
 
 export default async function library(ctx) {
   const kind = ctx.query.kind || 'coord';
   const settings = await getSettings();
-  const all = (await db.all('items')).filter((it) => it.kind === kind).sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+  const all = (await db.all('items')).filter((it) => it.kind === kind);
   await preloadCatalogImgs(kind === 'friend' ? [] : all.map((it) => it.catalogId));
+
+  // ---- ならびかえ（えらんだものは設定に覚えておく） ----
+  const SORTS = [['new', '登録した順（あたらしい）'], ['old', '登録した順（ふるい）'], ['name', 'なまえ順'], ['dan', 'シリーズ・だん順']];
+  let sort = SORTS.some(([k]) => k === settings.librarySort) ? settings.librarySort : 'new';
+  const collator = new Intl.Collator('ja');
+  const label = (it) => (kind === 'friend' ? it.friendName || it.name : it.name) || '';
+  // シリーズ・だん順：シリーズは絞り込みのチップと同じ順、だんは高い順、同じだんの中は公式リストにのっている順
+  const catIndex = new Map(((await getCatalog())?.items || []).map((c, i) => [c.id, i]));
+  const seriesRank = (it) => { const i = SERIES.findIndex(([k]) => k === seriesOf(it)); return i < 0 ? SERIES.length : i; };
+  const byNew = (a, b) => (b.createdAt || 0) - (a.createdAt || 0);
+  const compare = {
+    new: byNew,
+    old: (a, b) => -byNew(a, b),
+    name: (a, b) => collator.compare(label(a), label(b)) || byNew(a, b),
+    dan: (a, b) => seriesRank(a) - seriesRank(b) || (b.dan || 0) - (a.dan || 0)
+      || (catIndex.get(a.catalogId) ?? 1e9) - (catIndex.get(b.catalogId) ?? 1e9) || collator.compare(label(a), label(b)),
+  };
+  const sortSel = h('select', { class: 'select sort-select', 'aria-label': 'ならびかえ',
+    onchange: async (e) => { sort = e.target.value; draw(); await setSettings({ librarySort: sort }); } },
+    SORTS.map(([k, l]) => h('option', { value: k, selected: sort === k ? 'selected' : null }, l)));
 
   let favOnly = false;
   let q = '';
@@ -39,7 +59,7 @@ export default async function library(ctx) {
   const partsText = (it) => (it.qrs || []).map((x) => partLabel(x.part)).join(' / ');
 
   function draw() {
-    let list = all.filter(filter.test);
+    let list = all.filter(filter.test).sort(compare[sort]);
     if (favOnly) list = list.filter((it) => it.favorite);
     if (q) list = list.filter((it) => (it.name || '').includes(q) || (it.friendName || '').includes(q));
 
@@ -84,7 +104,9 @@ export default async function library(ctx) {
     }),
     searchBox,
     filter.el,
-    h('p', { class: 'hint' }, settings.libraryView === 'list' ? '長押しでへんしゅう' : 'タップでQRを表示・長押しでへんしゅう'),
+    h('div', { class: 'sort-row' },
+      h('p', { class: 'hint' }, settings.libraryView === 'list' ? '長押しでへんしゅう' : 'タップでQRを表示・長押しでへんしゅう'),
+      sortSel),
     body,
   );
 }
