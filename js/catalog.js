@@ -4,9 +4,16 @@ import { db } from './db.js';
 
 // ---- だんの表示 ----
 // ページ名（'oa4' / 'ring6' / '6'）の頭がシリーズ。数字だけは最初の「ひみつのアイプリ」
-export const SERIES = [['oa', 'おねがい'], ['ring', 'リング'], ['', 'ひみつ'], ['card', 'カード']];
+export const SERIES = [['oa', 'おねがい'], ['ring', 'リング'], ['', 'ひみつ'], ['card', 'カード'], ['primagi', 'プリマジ']];
 const SERIES_NAME = { oa: 'おねがい', ring: 'リング', '': '' };
 // カードリストの、だんの無いページ（scraper/make_catalog.py の CARD_PAGES とそろえる）
+// プリマジの章（page は 'pm-P01' など。scraper/make_catalog.py の PRIMAGI_PAGES とそろえる）
+const PRIMAGI_PAGES = {
+  P01: '第1章', P02: '第2章', P03: '第3章', P04: '第4章', P05: '第5章', P06: '第6章',
+  '2P01': 'スタジオ第1・2章', '2P03': 'スタジオ第3・4章', '2P05': 'スタジオ第5・6章', '2P07': 'スタジオ第7・8章',
+  '3P01': 'スタジオ第9章', '3P02': 'スタジオ第10章',
+};
+const primagiOf = (page) => (typeof page === 'string' && page.startsWith('pm-') ? page.slice(3) : null);
 const CARD_PAGES = { special: 'スペシャル', gumi: 'グミ', millefeui: 'ミルフィー', spcardpack: 'SPカードパック', hspecial: 'ひみつスペシャル', hgumi: 'ひみつグミ', memorial: 'メモリアル' };
 
 function splitPage(key) {
@@ -14,8 +21,10 @@ function splitPage(key) {
   return m ? { series: m[1], dan: Number(m[2]) } : null;
 }
 // コーデ（またはカタログの1件）のシリーズ。page が無い古いデータで dan だけあるときは最初のシリーズ扱い
-export const seriesOf = (it) => (CARD_PAGES[it?.page] ? 'card' : splitPage(it?.page)?.series ?? (it?.dan ? '' : null));
+export const seriesOf = (it) => (primagiOf(it?.page) ? 'primagi' : CARD_PAGES[it?.page] ? 'card' : splitPage(it?.page)?.series ?? (it?.dan ? '' : null));
 export function danLabel(it) {
+  const pm = primagiOf(it?.page);
+  if (pm) return `プリマジ${PRIMAGI_PAGES[pm] || pm}`;
   if (CARD_PAGES[it?.page]) return CARD_PAGES[it.page];
   const p = splitPage(it?.page);
   if (p) return `${SERIES_NAME[p.series] ?? p.series}${p.dan}だん`;

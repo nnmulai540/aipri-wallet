@@ -10,7 +10,8 @@ function pagesText(pages = []) {
   const m = new Map();
   const other = [];
   for (const p of pages) {
-    if (p.dan == null) other.push(p.label); // カードリストのスペシャルなど、だんの無いもの
+    // カードリストのスペシャルなど、だんの無いもの。プリマジは章が多いので「プリマジ」1つにまとめる
+    if (p.dan == null) { const l = p.series === 'プリマジ' ? 'プリマジ' : p.label; if (!other.includes(l)) other.push(l); }
     else m.set(p.series, [...(m.get(p.series) || []), p.dan]);
   }
   return [...[...m].map(([s, ds]) => `${s}${Math.min(...ds)}〜${Math.max(...ds)}だん`), ...other].join('・');
