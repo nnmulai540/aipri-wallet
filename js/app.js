@@ -1,7 +1,8 @@
 // 画面の切り替え（#/path?query 形式のハッシュルーター）と起動処理
 import { requestPersist } from './db.js';
 import { warmUp } from './qr.js';
-import { keepAwake } from './ui.js';
+import { keepAwake, toast } from './ui.js';
+import { syncNow, getSyncConfig, syncReady } from './sync.js';
 import { loadHeadingFont } from './fonts.js';
 import home from './screens/home.js';
 import library from './screens/library.js';
@@ -65,6 +66,22 @@ requestPersist();
 loadHeadingFont();
 // 読み取りエンジンを先に温めておく（初回の読み取りを速くする）
 setTimeout(warmUp, 800);
+
+// 同期の設定があれば、開いたときに裏で同期する。電波が無いとき（ゲーセン）は何もしない
+async function autoSync() {
+  if (!navigator.onLine || !syncReady(await getSyncConfig())) return;
+  try {
+    const r = await syncNow();
+    if (r.added || r.updated || r.removed) {
+      toast(`同期したよ（ついか ${r.added}・こうしん ${r.updated}・けした ${r.removed}）`);
+      // QR表示中・登録中は画面を作り直さない（表示が止まらないように）
+      const p = location.hash.slice(1).split('?')[0] || '/';
+      if (p === '/' || p.startsWith('/library')) render();
+    }
+  } catch (e) { console.warn('自動同期に失敗', e); }
+}
+setTimeout(autoSync, 1500);
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') autoSync(); });
 
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('sw.js').catch((e) => console.warn('SW 登録失敗', e));

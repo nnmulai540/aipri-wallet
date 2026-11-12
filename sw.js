@@ -1,12 +1,12 @@
 // オフラインでも即起動できるよう、アプリ本体を事前キャッシュする。
 // ファイルを変更したら VERSION を上げること（古いキャッシュが消えて更新される）。
-const VERSION = 'v3';
+const VERSION = 'v4';
 const SHELL = `shell-${VERSION}`;
 const FONTS = 'fonts-v1';
 
 const FILES = [
   './', 'index.html', 'manifest.webmanifest', 'css/app.css',
-  'js/app.js', 'js/db.js', 'js/qr.js', 'js/ui.js', 'js/fonts.js', 'js/catalog.js',
+  'js/app.js', 'js/db.js', 'js/qr.js', 'js/ui.js', 'js/fonts.js', 'js/catalog.js', 'js/sync.js',
   'js/screens/home.js', 'js/screens/library.js', 'js/screens/detail.js',
   'js/screens/view.js', 'js/screens/register.js', 'js/screens/range.js',
   'js/screens/picker.js', 'js/screens/save.js', 'js/screens/playlist.js',

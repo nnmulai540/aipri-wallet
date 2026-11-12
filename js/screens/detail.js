@@ -1,5 +1,5 @@
 // ⑭ コーデの詳細・編集：名前の変更・おきにいり・QRごとのパーツ変更/削除・QRついか・表示・削除
-import { db, getPlaylist, setPlaylist, rememberFriendName } from '../db.js';
+import { db, deleteItem, rememberFriendName } from '../db.js';
 import { loadImage, decodeCanvas, qrSvg, PARTS } from '../qr.js';
 import { h, fill, icon, go, back, header, thumb, pickFile, toast, busy, nameClass, KIND } from '../ui.js';
 import { openPicker } from './picker.js';
@@ -55,8 +55,7 @@ export default async function detail(ctx) {
 
   async function removeItem() {
     if (!confirm(`「${it.name || 'このデータ'}」をけす？（もとに戻せないよ）`)) return;
-    await db.del('items', it.id);
-    await setPlaylist((await getPlaylist()).filter((id) => id !== it.id));
+    await deleteItem(it.id);
     toast('けしたよ');
     back();
   }

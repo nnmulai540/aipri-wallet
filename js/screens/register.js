@@ -1,7 +1,9 @@
 // ③ QRをとりこむ：画像（配布画像・カードの直撮り）→ 自動でQRを全部さがす → パーツ振り分け → 種類・名前 → ほぞん
+// ⑰ パソコンでQR登録（?pc=1）：同じ処理を3列で。画像をまとめてドラッグ → 1まいずつ ほぞんして つぎへ／スキップ
 import { db, uid, getFriendNames, rememberFriendName } from '../db.js';
 import { loadImage, decodeCanvas, guessParts, makeThumb, PARTS } from '../qr.js';
 import { h, fill, icon, header, pickFile, toast, busy, KIND } from '../ui.js';
+import { syncNow, getSyncConfig, syncReady } from '../sync.js';
 import { openRange } from './range.js';
 import { openPicker } from './picker.js';
 
@@ -27,15 +29,21 @@ export default async function register(ctx) {
   let saveNames = {};
   const loadSaveNames = async () => { saveNames = Object.fromEntries((await db.all('saves')).map((x) => [x.slot, x.charName || ''])); };
   await loadSaveNames();
-  const root = h('div', { class: 'screen' });
-  ctx.onLeave = () => { if (st.imgUrl) URL.revokeObjectURL(st.imgUrl); };
+  const pc = ctx.query.pc === '1';
+  const root = h('div', { class: 'screen' + (pc ? ' pc' : '') });
+  let alive = true;
+  ctx.onLeave = () => { alive = false; if (st.imgUrl) URL.revokeObjectURL(st.imgUrl); };
 
   async function load(capture) {
     const file = await pickFile({ accept: 'image/*', capture });
     if (!file) return;
+    await loadFile(file);
+  }
+  // cached: 先に読んであった結果（パソコンのまとめ読み）。あれば読み直さない
+  async function loadFile(file, cached = null) {
     await busy('よみとり中…', async () => {
       const canvas = await loadImage(file);
-      const recs = await decodeCanvas(canvas);
+      const recs = cached ? cached.map((r) => ({ ...r })) : await decodeCanvas(canvas);
       if (st.imgUrl) URL.revokeObjectURL(st.imgUrl);
       const blob = await new Promise((r) => canvas.toBlob(r, 'image/jpeg', 0.9));
       Object.assign(st, { canvas, imgUrl: URL.createObjectURL(blob), recs: [], tried: true });
@@ -56,8 +64,89 @@ export default async function register(ctx) {
     if (fresh.length) { addRecs(fresh); draw(); }
   }
 
+  // ---- パソコン：まとめて読み込む画像の列 ----
+  const queue = [];   // { file, status: 'wait'|'done'|'skip', recs: null|[] }
+  let qi = -1;
+  let scanning = false;
+  const listEl = h('div', { class: 'pc-files' });
+  async function addFiles(files) {
+    files = files.filter((f) => f && f.type.startsWith('image/'));
+    if (!files.length) return;
+    const first = queue.length;
+    queue.push(...files.map((file) => ({ file, status: 'wait', recs: null })));
+    if (qi < 0) await openQueue(first); else drawList();
+    scanAll();
+  }
+  // 残りの画像も裏で読んで、左の一覧に「QR nこ見つかった」を出す
+  async function scanAll() {
+    if (scanning) return;
+    scanning = true;
+    for (const q of queue) {
+      if (!alive) break;
+      if (q.recs) continue;
+      try { q.recs = await decodeCanvas(await loadImage(q.file)); } catch { q.recs = []; }
+      drawList();
+    }
+    scanning = false;
+  }
+  async function openQueue(i) {
+    qi = i;
+    const q = queue[i];
+    Object.assign(st, { coord: null, friendName: '', charName: null });
+    await loadFile(q.file, q.recs);
+    q.recs = q.recs || st.recs.map((r) => ({ ...r }));
+  }
+  async function nextInQueue(status) {
+    if (qi >= 0) queue[qi].status = status;
+    const order = [...queue.keys()].slice(qi + 1).concat([...queue.keys()].slice(0, qi + 1));
+    const n = order.find((i) => queue[i].status === 'wait');
+    if (n === undefined) {
+      if (st.imgUrl) URL.revokeObjectURL(st.imgUrl);
+      Object.assign(st, { canvas: null, imgUrl: null, recs: [], tried: false });
+      qi = -1;
+      draw();
+      // ぜんぶ終わったら、同期の設定があればそのままスマホへ送る
+      if (syncReady(await getSyncConfig())) syncBtn.click();
+      else toast('ぜんぶおわったよ');
+      return;
+    }
+    await openQueue(n);
+  }
+  function drawList() {
+    const thumbUrl = (q) => (q.url ||= URL.createObjectURL(q.file));
+    fill(listEl, queue.map((q, i) => h('button', { class: 'pc-file' + (i === qi ? ' on' : '') + (q.status !== 'wait' ? ' fin' : ''), onclick: () => openQueue(i) },
+      h('img', { src: thumbUrl(q), alt: '' }),
+      h('span', { class: 'body' },
+        h('span', { class: 'fname' }, q.file.name),
+        h('span', { class: 'fmeta' + (q.recs && !q.recs.length ? ' warn' : '') },
+          q.status === 'done' ? 'ほぞんしたよ' : q.status === 'skip' ? 'スキップ'
+            : !q.recs ? 'よみとり中…' : q.recs.length ? `QR ${q.recs.length}こ見つかった` : '見つからなかった')))));
+  }
+  const dropZone = h('div', { class: 'drop' },
+    icon('upload', 'width="28" height="28"'),
+    h('span', {}, '画像をここにドラッグ'),
+    h('small', {}, 'まとめて何まいでもOK'),
+    h('button', { class: 'btn pink', onclick: async () => addFiles((await pickFile({ accept: 'image/*', multiple: true })) || []) }, 'ファイルをえらぶ'));
+  if (pc) {
+    // 画面のどこに落としても受け取る
+    root.addEventListener('dragover', (e) => { e.preventDefault(); dropZone.classList.add('over'); });
+    root.addEventListener('dragleave', (e) => { if (e.target === dropZone) dropZone.classList.remove('over'); });
+    root.addEventListener('drop', (e) => { e.preventDefault(); dropZone.classList.remove('over'); addFiles([...e.dataTransfer.files]); });
+  }
+  const syncBtn = h('button', { class: 'btn outline', style: 'min-height:40px;padding:0 14px;font-size:14px', onclick: async () => {
+    try {
+      const r = await busy('同期中…', syncNow);
+      toast(r.added || r.updated || r.removed ? `同期したよ（ついか ${r.added}・こうしん ${r.updated}・けした ${r.removed}）` : '同期したよ');
+    } catch (e) { toast(e.message || '同期できなかったよ'); }
+  } }, icon('refresh'), '同期');
+
   function previewCard() {
     if (!st.canvas) {
+      if (pc) {
+        return h('div', { class: 'card empty', style: 'padding:28px 16px' },
+          icon('image', 'width="40" height="40" style="color:var(--line2)"'),
+          h('span', {}, queue.length ? 'ぜんぶおわったよ。つづけるときは画像をドラッグしてね' : '左に画像をドラッグしてね'));
+      }
       return h('div', { class: 'card empty', style: 'padding:28px 16px' },
         icon('image', 'width="40" height="40" style="color:var(--line2)"'),
         h('span', {}, '配布されている画像や、カードを撮った写真をえらんでね'),
@@ -73,7 +162,7 @@ export default async function register(ctx) {
       h('div', { class: 'pimg' }, h('img', { src: st.imgUrl, alt: '取り込んだ画像' }), boxes),
       h('div', { class: 'pinfo' },
         n ? h('span', { class: 'badge-ok' }, icon('check'), `${n}こ 見つかったよ`) : h('span', { class: 'badge-warn' }, icon('warn'), '見つからなかった'),
-        h('span', {}, n ? '足りないときは' : 'QRのところを', h('br'), '画像を指でかこんでね'),
+        h('span', {}, n ? '足りないときは' : 'QRのところを', h('br'), pc ? 'マウスでかこんでね' : '画像を指でかこんでね'),
         h('button', { class: 'link-btn', style: 'padding-left:0', onclick: range }, 'はんいを指定する')));
   }
 
@@ -161,11 +250,13 @@ export default async function register(ctx) {
     Object.assign(st, { canvas: null, imgUrl: null, recs: [], tried: false, coord: null, friendName: '', charName: null });
     await loadSaveNames();
     if (st.kind === 'friend') friendNames.splice(0, friendNames.length, ...(await getFriendNames()));
+    if (pc && qi >= 0) { await nextInQueue('done'); return; }
     draw();
     window.scrollTo(0, 0);
   }
 
   function draw() {
+    if (pc) { drawPc(); return; }
     fill(root, 
       header({ title: 'QRをとりこむ' }),
       h('div', { class: 'two-btns' },
@@ -181,6 +272,33 @@ export default async function register(ctx) {
       h('button', { class: 'btn primary block', disabled: !st.recs.length, onclick: save }, 'ほぞんする'),
     );
   }
+  function drawPc() {
+    drawList();
+    const left = queue.filter((q) => q.status === 'wait').length;
+    fill(root,
+      header({
+        title: 'パソコンでQR登録',
+        right: [
+          queue.length ? h('span', { class: 'pc-count' }, qi >= 0 ? `${queue.length}まい中 ${qi + 1}まいめ` : `のこり ${left}まい`) : null,
+          syncBtn,
+        ],
+      }),
+      h('div', { class: 'pc-grid' },
+        h('div', { class: 'pc-col' }, dropZone, listEl),
+        h('div', { class: 'pc-col' }, previewCard()),
+        h('div', { class: 'pc-col card' },
+          h('h2', { class: 'sec-title', style: 'margin:0' }, 'しゅるい'),
+          h('div', { class: 'kind-chips' }, ['coord', 'chance', 'friend', 'save'].map((k) =>
+            h('button', { class: 'chip' + (st.kind === k ? ' on' : ''), onclick: () => { st.kind = k; draw(); } }, KIND[k]))),
+          nameField(),
+          partRows(),
+          h('div', { class: 'two-btns' },
+            h('button', { class: 'btn outline', disabled: qi < 0, onclick: () => nextInQueue('skip') }, 'スキップ'),
+            h('button', { class: 'btn primary', disabled: !st.recs.length, onclick: save }, 'ほぞんして つぎへ')))),
+    );
+  }
   draw();
+  // 同期の設定がまだなら、パソコン画面で教える
+  if (pc) getSyncConfig().then((c) => { if (!syncReady(c)) syncBtn.title = 'せってい で GitHub のトークンを入れると同期できるよ'; });
   return root;
 }

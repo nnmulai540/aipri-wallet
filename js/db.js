@@ -78,6 +78,15 @@ export async function rememberFriendName(name) {
   await db.put('kv', list.slice(0, 200), 'friendNames');
 }
 
+// ---- 消したコーデの記録（id → 消した時刻）。同期のとき、ほかの端末でも消すために使う ----
+export const getDeleted = async () => (await db.get('kv', 'deleted')) || {};
+export const setDeleted = (m) => db.put('kv', m, 'deleted');
+export async function deleteItem(id) {
+  await db.del('items', id);
+  await setDeleted({ ...(await getDeleted()), [id]: Date.now() });
+  await setPlaylist((await getPlaylist()).filter((x) => x !== id));
+}
+
 // ---- 保存領域を消されにくくする（iOS のストレージ整理対策） ----
 export async function requestPersist() {
   try { if (navigator.storage?.persist) await navigator.storage.persist(); } catch { /* 未対応なら何もしない */ }
@@ -85,7 +94,7 @@ export async function requestPersist() {
 
 // ---- バックアップ（書き出し／読み込み）。パソコン⇔スマホの受け渡しにも使う ----
 const blobToDataURL = (b) => new Promise((res) => { const r = new FileReader(); r.onload = () => res(r.result); r.readAsDataURL(b); });
-const dataURLToBlob = async (u) => (await fetch(u)).blob();
+export const dataURLToBlob = async (u) => (await fetch(u)).blob();
 
 export async function exportBackup() {
   const items = await db.all('items');

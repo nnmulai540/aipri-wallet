@@ -2,7 +2,15 @@
 import { db, getSettings, setSettings, exportBackup, importBackup } from '../db.js';
 import { h, fill, icon, header, pickFile, toast, busy, fmtDate } from '../ui.js';
 import { importCatalog, getCatalog } from '../catalog.js';
+import { getSyncConfig, setSyncConfig, syncNow, syncReady, DEFAULT_REPO } from '../sync.js';
 import { loadHeadingFont } from '../fonts.js';
+
+// 「おねがい1〜4だん・リング1〜6だん・1〜6だん」のように、シリーズごとにまとめて短く書く
+function pagesText(pages = []) {
+  const m = new Map();
+  for (const p of pages) m.set(p.series, [...(m.get(p.series) || []), p.dan]);
+  return [...m].map(([s, ds]) => `${s}${Math.min(...ds)}〜${Math.max(...ds)}だん`).join('・');
+}
 
 export default async function settings() {
   let s = await getSettings();
@@ -45,6 +53,18 @@ export default async function settings() {
     }
     draw();
   }
+  async function doSync() {
+    try {
+      const r = await busy('同期中…', syncNow);
+      toast(r.added || r.updated || r.removed ? `同期したよ（ついか ${r.added}・こうしん ${r.updated}・けした ${r.removed}）` : '同期したよ（かわりなし）');
+    } catch (e) { toast(e.message || '同期できなかったよ'); }
+    draw();
+  }
+  async function saveSyncCfg(repo, token) {
+    await setSyncConfig({ repo: repo.trim() || DEFAULT_REPO, token: token.trim() });
+    toast('ほぞんしたよ');
+    draw();
+  }
   async function doFont() {
     const file = await pickFile({ accept: '.otf,.ttf,.woff,.woff2,font/*' });
     if (!file) return;
@@ -57,6 +77,10 @@ export default async function settings() {
   async function draw() {
     const hasFont = !!(await db.get('kv', 'headingFont'));
     const cat = await getCatalog();
+    const sync = (await getSyncConfig()) || { repo: DEFAULT_REPO };
+    const ready = syncReady(sync);
+    const repoIn = h('input', { class: 'text-input', value: sync.repo || DEFAULT_REPO, placeholder: 'ユーザー名/リポジトリ名', autocomplete: 'off', autocapitalize: 'off', spellcheck: 'false', 'aria-label': 'リポジトリ' });
+    const tokenIn = h('input', { class: 'text-input', type: 'password', value: sync.token || '', placeholder: 'github_pat_…', autocomplete: 'off', 'aria-label': 'トークン' });
     const opt = (key, cls, label, desc) => h('button', { class: 'view-opt' + (s.libraryView === key ? ' on' : ''), 'aria-pressed': String(s.libraryView === key), onclick: async () => { s = await setSettings({ libraryView: key }); draw(); } },
       h('div', { class: `pv ${cls}` }, ...(cls === 'grid'
         ? ['#FFE0EE', '#DFF0FF', '#EDE3FF', '#DDF6EF', '#FFF4D6', '#FFE0EE'].map((c) => h('i', { style: `background:${c}` }))
@@ -81,9 +105,20 @@ export default async function settings() {
         h('h2', { class: 'sec-title', style: 'margin:0 0 6px' }, '公式コーデリスト'),
         h('p', { class: 'muted', style: 'font-size:13px;margin:0 0 12px;line-height:1.6' },
           cat
-            ? `${cat.items.length}コーデ（${(cat.pages || []).map((p) => p.label).join('・')}）。${fmtDate(Date.parse(cat.createdAt))} に作ったリストだよ。`
+            ? `${cat.items.length}コーデ（${pagesText(cat.pages)}）。${fmtDate(Date.parse(cat.createdAt))} に作ったリストだよ。`
             : 'パソコンで作った catalog.zip を取り込むと、コーデ名をリストからえらべて、コーデの画像も出るよ。画像はこの端末の中だけに保存されるよ。'),
         h('button', { class: 'btn outline block', onclick: doCatalog }, icon('upload'), cat ? '新しいリストに入れかえる' : 'catalog.zip を取り込む')),
+      h('section', { class: 'card' },
+        h('h2', { class: 'sec-title', style: 'margin:0 0 6px' }, 'パソコンと同期（GitHub）'),
+        h('p', { class: 'muted', style: 'font-size:13px;margin:0 0 12px;line-height:1.6' },
+          ready
+            ? (sync.lastSyncAt ? `さいごに同期：${fmtDate(sync.lastSyncAt)} ${new Date(sync.lastSyncAt).toTimeString().slice(0, 5)}。アプリを開いたときにも自動で同期するよ。` : 'まだ同期していないよ。')
+            : '自分の「非公開」リポジトリと、そこだけ読み書きできるトークンを入れると、パソコンとスマホで登録したQRが行き来するよ。トークンはこの端末の中だけに保存されるよ。'),
+        h('div', { class: 'set-btns' },
+          h('label', { class: 'field-label' }, 'リポジトリ', repoIn),
+          h('label', { class: 'field-label' }, 'トークン', tokenIn),
+          h('button', { class: 'btn outline block', onclick: () => saveSyncCfg(repoIn.value, tokenIn.value) }, 'ほぞん'),
+          ready ? h('button', { class: 'btn primary block', onclick: doSync }, icon('refresh'), '今すぐ同期する') : null)),
       h('section', { class: 'card' },
         h('h2', { class: 'sec-title', style: 'margin:0 0 6px' }, 'データ'),
         h('p', { class: 'muted', style: 'font-size:13px;margin:0 0 12px;line-height:1.6' }, '機種変更のときや、パソコンで登録したものをスマホに送るときに使うよ。読み込むと、いまのデータに追加されるよ。'),

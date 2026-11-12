@@ -38,6 +38,7 @@ export default async function home() {
       h('button', { class: 'btn outline', onclick: () => go('/library?kind=coord') }, 'コーデ'),
       h('button', { class: 'btn outline', onclick: () => go('/library?kind=chance') }, 'チャンスコード'),
       h('button', { class: 'btn outline', onclick: () => go('/library?kind=friend') }, 'フレンドコード')),
+    h('button', { class: 'link-btn pc-link', onclick: () => go('/register?pc=1') }, icon('upload'), 'パソコンでQR登録（画像をまとめて）'),
 
     h('button', { class: 'fab', 'aria-label': 'QRを登録', onclick: () => go('/register') }, icon('plus')),
   );
