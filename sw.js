@@ -1,6 +1,6 @@
 // オフラインでも即起動できるよう、アプリ本体を事前キャッシュする。
 // ファイルを変更したら VERSION を上げること（古いキャッシュが消えて更新される）。
-const VERSION = 'v7';
+const VERSION = 'v8';
 const SHELL = `shell-${VERSION}`;
 const FONTS = 'fonts-v1';
 

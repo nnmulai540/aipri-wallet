@@ -7,7 +7,7 @@ import { db } from './db.js';
 export const SERIES = [['oa', 'おねがい'], ['ring', 'リング'], ['', 'ひみつ'], ['card', 'カード']];
 const SERIES_NAME = { oa: 'おねがい', ring: 'リング', '': '' };
 // カードリストの、だんの無いページ（scraper/make_catalog.py の CARD_PAGES とそろえる）
-const CARD_PAGES = { special: 'スペシャル', gumi: 'グミ', millefeui: 'ミルフィー', spcardpack: 'SPカードパック' };
+const CARD_PAGES = { special: 'スペシャル', gumi: 'グミ', millefeui: 'ミルフィー', spcardpack: 'SPカードパック', hspecial: 'ひみつスペシャル', hgumi: 'ひみつグミ', memorial: 'メモリアル' };
 
 function splitPage(key) {
   const m = /^([a-z]*)(\d+)$/.exec(key || '');
