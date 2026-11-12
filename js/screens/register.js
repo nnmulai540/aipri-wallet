@@ -17,7 +17,7 @@ export default async function register(ctx) {
   const st = {
     kind: ['coord', 'chance', 'friend', 'save'].includes(ctx.query.kind) ? ctx.query.kind : 'coord',
     canvas: null, imgUrl: null, recs: [], tried: false,
-    coord: null,        // { name, nameSource, catalogId, dan }
+    coord: null,        // { name, nameSource, catalogId, dan, page }
     friendName: '',
     slot: 1,
     charName: null,     // null = 今の名前のまま
@@ -95,7 +95,7 @@ export default async function register(ctx) {
 
   function nameField() {
     const coordBtn = (label, val) => h('div', { class: 'search name-btn', role: 'button', tabindex: '0', onclick: async () => {
-      const v = await openPicker({ current: val?.name || '' });
+      const v = await openPicker({ current: val?.name || '', catalogId: val?.catalogId });
       if (v) { st.coord = v; draw(); }
     } },
       icon('search'),
@@ -147,10 +147,10 @@ export default async function register(ctx) {
         item.friendName = st.friendName.trim();
         item.name = item.friendName;
         item.nameSource = 'free';
-        if (st.coord) Object.assign(item, { coordName: st.coord.name, coordNameSource: st.coord.nameSource, catalogId: st.coord.catalogId, dan: st.coord.dan });
+        if (st.coord) Object.assign(item, { coordName: st.coord.name, coordNameSource: st.coord.nameSource, catalogId: st.coord.catalogId, dan: st.coord.dan, page: st.coord.page });
         await rememberFriendName(item.friendName);
       } else if (st.coord) {
-        Object.assign(item, { name: st.coord.name, nameSource: st.coord.nameSource, catalogId: st.coord.catalogId, dan: st.coord.dan });
+        Object.assign(item, { name: st.coord.name, nameSource: st.coord.nameSource, catalogId: st.coord.catalogId, dan: st.coord.dan, page: st.coord.page });
       }
       await db.put('items', item);
       toast('ほぞんしたよ');

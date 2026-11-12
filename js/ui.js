@@ -1,4 +1,5 @@
 // 画面づくりの共通部品。ユーザーの入力した文字は必ず textContent 経由で入れる（innerHTML に入れない）
+import { SERIES, seriesOf, cachedCatalogImg, catalogImg } from './catalog.js';
 
 export function h(tag, props = {}, ...children) {
   const el = document.createElement(tag);
@@ -131,10 +132,47 @@ export function blobUrl(blob) {
   return urlCache.get(blob);
 }
 export function thumb(item, idx = 0, { noImgText = true } = {}) {
-  const src = blobUrl(item?.image);
-  if (src) return h('div', { class: 'thumb', style: `background:${BG[idx % BG.length]}` }, h('img', { src, alt: '', loading: 'lazy' }));
-  if (noImgText) return h('div', { class: 'thumb noimg' }, icon('dress', 'class="dress"'), '画像なし');
-  return h('div', { class: 'thumb', style: `background:${BG[idx % BG.length]}` }, icon('dress', 'class="dress"'));
+  // 公式リストのコーデなら公式の全身画像を優先。フレンドは本人の写真（取り込んだ画像）を優先
+  const catId = item?.kind !== 'friend' ? item?.catalogId : null;
+  const own = blobUrl(item?.image);
+  const make = (src) => {
+    if (src) return h('div', { class: 'thumb', style: `background:${BG[idx % BG.length]}` }, h('img', { src, alt: '', loading: 'lazy' }));
+    if (noImgText) return h('div', { class: 'thumb noimg' }, icon('dress', 'class="dress"'), '画像なし');
+    return h('div', { class: 'thumb', style: `background:${BG[idx % BG.length]}` }, icon('dress', 'class="dress"'));
+  };
+  const hit = cachedCatalogImg(catId);
+  if (!catId || hit !== undefined) return make(hit || own);
+  // まだ読んでいない公式画像は、あとから差しかえる
+  const el = make(own);
+  catalogImg(catId).then((src) => { if (src) el.replaceWith(make(src)); });
+  return el;
+}
+
+// 一覧・コーデ名えらびの絞り込み：シリーズ（2種類以上あるときだけ）と だん の2段のチップ。
+// 絞り込みが変わると onChange() を呼ぶ。test(it) で当てはまるか判定する。extra() は だん の行の最後に足すチップ
+export function danFilter(list, onChange, { extra = null } = {}) {
+  const st = { series: 'all', dan: 'all' };
+  const seriesHere = SERIES.filter(([k]) => list.some((it) => seriesOf(it) === k));
+  const el = h('div', { class: 'dan-filter' });
+  const chip = (on, label, fn) => h('button', { class: 'chip' + (on ? ' on' : ''), onclick: () => { fn(); draw(); onChange(); } }, label);
+  function draw() {
+    const inSeries = list.filter((it) => st.series === 'all' || seriesOf(it) === st.series);
+    const dans = [...new Set(inSeries.map((it) => it.dan).filter(Boolean))].sort((a, b) => b - a);
+    if (st.dan !== 'all' && !dans.includes(st.dan)) st.dan = 'all';
+    fill(el,
+      seriesHere.length > 1 ? h('div', { class: 'chips' },
+        chip(st.series === 'all', 'ぜんぶ', () => { st.series = 'all'; }),
+        ...seriesHere.map(([k, l]) => chip(st.series === k, l, () => { st.series = k; }))) : null,
+      h('div', { class: 'chips' },
+        chip(st.dan === 'all', seriesHere.length > 1 ? 'どのだんも' : 'ぜんぶ', () => { st.dan = 'all'; }),
+        dans.map((d) => chip(st.dan === d, `${d}だん`, () => { st.dan = d; })),
+        extra ? extra() : null));
+  }
+  draw();
+  return {
+    el, redraw: draw,
+    test: (it) => (st.series === 'all' || seriesOf(it) === st.series) && (st.dan === 'all' || it.dan === st.dan),
+  };
 }
 
 // 名前の表示：公式リストから選んだ名前だけ見出しフォント(うたミン)、自由入力は本文フォント

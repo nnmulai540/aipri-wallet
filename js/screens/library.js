@@ -1,35 +1,34 @@
 // ④ 一覧（ならべる=3列 / リスト=1列 は設定で切り替え）。タップでQR表示、長押しで詳細・編集
 import { db, getSettings } from '../db.js';
 import { partLabel } from '../qr.js';
-import { h, icon, go, header, thumb, onPress, nameClass, LIST_TITLE } from '../ui.js';
+import { h, icon, go, header, thumb, onPress, nameClass, danFilter, LIST_TITLE } from '../ui.js';
+import { danLabel, preloadCatalogImgs } from '../catalog.js';
 
 export default async function library(ctx) {
   const kind = ctx.query.kind || 'coord';
   const settings = await getSettings();
   const all = (await db.all('items')).filter((it) => it.kind === kind).sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
-  const dans = [...new Set(all.map((it) => it.dan).filter(Boolean))].sort((a, b) => b - a);
+  await preloadCatalogImgs(kind === 'friend' ? [] : all.map((it) => it.catalogId));
 
-  let filter = 'all';
+  let favOnly = false;
   let q = '';
   const body = h('div');
   const searchBox = h('div', { class: 'search hidden' },
     icon('search'),
     h('input', { type: 'search', placeholder: 'なまえでさがす', 'aria-label': 'なまえでさがす', oninput: (e) => { q = e.target.value.trim(); draw(); } }));
 
-  const chips = h('div', { class: 'chips' });
-  function drawChips() {
-    const opts = [['all', 'ぜんぶ'], ...dans.map((d) => [d, `${d}だん`]), ['fav', null]];
-    chips.replaceChildren(...opts.map(([k, label]) =>
-      h('button', { class: 'chip' + (filter === k ? ' on' : ''), 'aria-label': k === 'fav' ? 'おきにいり' : null, onclick: () => { filter = k; drawChips(); draw(); } },
-        k === 'fav' ? icon('heart', 'style="color:var(--pink)"') : label)));
-  }
+  // シリーズ・だん の絞り込みに、おきにいりだけ表示（ハート）を重ねがけできる
+  const filter = danFilter(all, () => draw(), {
+    extra: () => h('button', { class: 'chip' + (favOnly ? ' on' : ''), 'aria-label': 'おきにいり', 'aria-pressed': String(favOnly),
+      onclick: () => { favOnly = !favOnly; filter.redraw(); draw(); } }, icon('heart', 'style="color:var(--pink)"')),
+  });
 
   async function toggleFav(it, btn) {
     it.favorite = !it.favorite;
     it.updatedAt = Date.now();
     await db.put('items', it);
     btn.replaceChildren(icon(it.favorite ? 'heart' : 'heartLine'));
-    if (filter === 'fav') draw();
+    if (favOnly) draw();
   }
   const favBtn = (it) => {
     const b = h('button', { class: 'fav-btn', 'aria-label': 'おきにいり', 'aria-pressed': String(!!it.favorite) }, icon(it.favorite ? 'heart' : 'heartLine'));
@@ -40,9 +39,8 @@ export default async function library(ctx) {
   const partsText = (it) => (it.qrs || []).map((x) => partLabel(x.part)).join(' / ');
 
   function draw() {
-    let list = all;
-    if (filter === 'fav') list = list.filter((it) => it.favorite);
-    else if (filter !== 'all') list = list.filter((it) => it.dan === filter);
+    let list = all.filter(filter.test);
+    if (favOnly) list = list.filter((it) => it.favorite);
     if (q) list = list.filter((it) => (it.name || '').includes(q) || (it.friendName || '').includes(q));
 
     if (!list.length) {
@@ -57,7 +55,7 @@ export default async function library(ctx) {
           thumb(it, i),
           h('div', { class: 'body' },
             h('div', { class: 'name ' + nameClass(it) }, it.name || '（なまえなし）'),
-            h('div', { class: 'meta' }, [it.dan ? `${it.dan}だん` : null, kind === 'friend' ? it.friendName : null, partsText(it)].filter(Boolean).join('　')),
+            h('div', { class: 'meta' }, [danLabel(it) || null, kind === 'friend' ? it.friendName : null, partsText(it)].filter(Boolean).join('　')),
             h('button', { class: 'btn primary', onclick: (e) => { e.stopPropagation(); go('/view?item=' + it.id); } }, 'QRコードを表示')),
           favBtn(it));
         onPress(row, { long: () => go('/item/' + it.id) });
@@ -75,7 +73,6 @@ export default async function library(ctx) {
     }
   }
 
-  drawChips();
   draw();
   return h('div', { class: 'screen' },
     header({
@@ -86,7 +83,7 @@ export default async function library(ctx) {
       ],
     }),
     searchBox,
-    chips,
+    filter.el,
     h('p', { class: 'hint' }, settings.libraryView === 'list' ? '長押しでへんしゅう' : 'タップでQRを表示・長押しでへんしゅう'),
     body,
   );

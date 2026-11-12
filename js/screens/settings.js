@@ -1,6 +1,7 @@
-// ⑤ せってい：一覧の見た目・QR表示中のふるまい・バックアップ・見出しフォント・保存容量
+// ⑤ せってい：一覧の見た目・QR表示中のふるまい・公式コーデリスト・バックアップ・見出しフォント・保存容量
 import { db, getSettings, setSettings, exportBackup, importBackup } from '../db.js';
-import { h, fill, icon, header, pickFile, toast, busy } from '../ui.js';
+import { h, fill, icon, header, pickFile, toast, busy, fmtDate } from '../ui.js';
+import { importCatalog, getCatalog } from '../catalog.js';
 import { loadHeadingFont } from '../fonts.js';
 
 export default async function settings() {
@@ -32,6 +33,18 @@ export default async function settings() {
       toast(e.message || '読み込めなかったよ');
     }
   }
+  async function doCatalog() {
+    const file = await pickFile({ accept: '.zip,application/zip' });
+    if (!file) return;
+    try {
+      const r = await busy('公式リストを取り込み中…', () => importCatalog(file));
+      toast(`${r.count}コーデを取り込んだよ` + (r.linked ? `（登録ずみの ${r.linked}こ にも画像がついたよ）` : ''));
+    } catch (e) {
+      console.error(e);
+      toast(e.message || '取り込めなかったよ');
+    }
+    draw();
+  }
   async function doFont() {
     const file = await pickFile({ accept: '.otf,.ttf,.woff,.woff2,font/*' });
     if (!file) return;
@@ -43,6 +56,7 @@ export default async function settings() {
 
   async function draw() {
     const hasFont = !!(await db.get('kv', 'headingFont'));
+    const cat = await getCatalog();
     const opt = (key, cls, label, desc) => h('button', { class: 'view-opt' + (s.libraryView === key ? ' on' : ''), 'aria-pressed': String(s.libraryView === key), onclick: async () => { s = await setSettings({ libraryView: key }); draw(); } },
       h('div', { class: `pv ${cls}` }, ...(cls === 'grid'
         ? ['#FFE0EE', '#DFF0FF', '#EDE3FF', '#DDF6EF', '#FFF4D6', '#FFE0EE'].map((c) => h('i', { style: `background:${c}` }))
@@ -63,6 +77,13 @@ export default async function settings() {
         // iPhone の Web アプリからは画面の明るさを変えられないため、案内を出す設定にしている
         check('brightHint', '明るさを上げる案内を出す', 'Webアプリでは明るさを自動で変えられないので、コントロールセンターで上げてね'),
         check('keepAwake', '表示中はスリープしない')),
+      h('section', { class: 'card' },
+        h('h2', { class: 'sec-title', style: 'margin:0 0 6px' }, '公式コーデリスト'),
+        h('p', { class: 'muted', style: 'font-size:13px;margin:0 0 12px;line-height:1.6' },
+          cat
+            ? `${cat.items.length}コーデ（${(cat.pages || []).map((p) => p.label).join('・')}）。${fmtDate(Date.parse(cat.createdAt))} に作ったリストだよ。`
+            : 'パソコンで作った catalog.zip を取り込むと、コーデ名をリストからえらべて、コーデの画像も出るよ。画像はこの端末の中だけに保存されるよ。'),
+        h('button', { class: 'btn outline block', onclick: doCatalog }, icon('upload'), cat ? '新しいリストに入れかえる' : 'catalog.zip を取り込む')),
       h('section', { class: 'card' },
         h('h2', { class: 'sec-title', style: 'margin:0 0 6px' }, 'データ'),
         h('p', { class: 'muted', style: 'font-size:13px;margin:0 0 12px;line-height:1.6' }, '機種変更のときや、パソコンで登録したものをスマホに送るときに使うよ。読み込むと、いまのデータに追加されるよ。'),

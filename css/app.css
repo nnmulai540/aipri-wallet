@@ -81,6 +81,7 @@ a { color: var(--main); }
 
 /* ---- チップ ---- */
 .chips { display: flex; gap: 8px; flex-wrap: wrap; }
+.dan-filter { display: flex; flex-direction: column; gap: 8px; }
 .chip {
   min-height: 40px; padding: 0 16px; border-radius: 999px;
   border: 2px solid var(--line); background: var(--white); color: var(--text);
@@ -279,6 +280,7 @@ a { color: var(--main); }
 .pick-row { display: flex; align-items: center; gap: 12px; background: var(--white); border-radius: 20px; padding: 10px 14px; border: 2px solid transparent; text-align: left; width: 100%; }
 .pick-row.on { border-color: var(--main); }
 .pick-row .body { flex: 1; min-width: 0; }
+.pick-row .thumb { width: 40px; height: 56px; border-radius: 10px; flex-shrink: 0; }
 .pick-row .name { font-family: var(--font-head); font-size: 17px; }
 .pick-row .name.free-font { font-family: var(--font-body); font-weight: 700; }
 .pick-row .name mark { background: var(--pale); color: inherit; border-radius: 4px; }

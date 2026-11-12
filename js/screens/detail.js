@@ -4,6 +4,7 @@ import { loadImage, decodeCanvas, qrSvg, PARTS } from '../qr.js';
 import { h, fill, icon, go, back, header, thumb, pickFile, toast, busy, nameClass, KIND } from '../ui.js';
 import { openPicker } from './picker.js';
 import { openRange } from './range.js';
+import { danLabel } from '../catalog.js';
 
 export default async function detail(ctx) {
   const it = await db.get('items', ctx.params.id);
@@ -18,16 +19,16 @@ export default async function detail(ctx) {
       it.friendName = it.name = n.trim();
       await rememberFriendName(it.friendName);
     } else {
-      const v = await openPicker({ current: it.name || '' });
+      const v = await openPicker({ current: it.name || '', catalogId: it.catalogId });
       if (!v) return;
-      Object.assign(it, { name: v.name, nameSource: v.nameSource, catalogId: v.catalogId, dan: v.dan });
+      Object.assign(it, { name: v.name, nameSource: v.nameSource, catalogId: v.catalogId, dan: v.dan, page: v.page });
     }
     await saveIt(); draw();
   }
   async function changeFriendCoord() {
-    const v = await openPicker({ current: it.coordName || '' });
+    const v = await openPicker({ current: it.coordName || '', catalogId: it.catalogId });
     if (!v) return;
-    Object.assign(it, { coordName: v.name, coordNameSource: v.nameSource, catalogId: v.catalogId, dan: v.dan });
+    Object.assign(it, { coordName: v.name, coordNameSource: v.nameSource, catalogId: v.catalogId, dan: v.dan, page: v.page });
     await saveIt(); draw();
   }
 
@@ -83,7 +84,7 @@ export default async function detail(ctx) {
         thumb(it, 0),
         h('div', { class: 'rows' },
           kv('しゅるい', KIND[it.kind]),
-          it.dan ? kv('だん', `${it.dan}だん`) : null,
+          it.dan ? kv('だん', danLabel(it)) : null,
           it.kind === 'friend' ? kv('コーデ', it.coordName || 'まだ', h('button', { class: 'link-btn', onclick: changeFriendCoord }, 'かえる')) : null,
           h('div', { class: 'spacer', style: 'min-height:12px' }),
           h('button', { class: 'fav-toggle', 'aria-pressed': String(!!it.favorite), onclick: async () => { it.favorite = !it.favorite; await saveIt(); draw(); } },

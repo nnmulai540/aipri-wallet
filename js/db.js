@@ -1,9 +1,10 @@
 // IndexedDB の小さなラッパー。データはすべてこの iPhone(ブラウザ) の中だけに保存する。
 //   items : 登録したQR（コーデ/チャンス/フレンド）。1件に QR を1〜3個持つ
 //   saves : セーブコード（slot 1 / 2）
-//   kv    : 設定・プレイリスト・フレンド名の記憶・フォントなど
+//   kv    : 設定・プレイリスト・フレンド名の記憶・フォント・公式コーデリスト(catalog)など
+//   catimg: 公式コーデ画像（カタログの id → Blob）。catalog.zip から取り込む
 const DB_NAME = 'aipri-wallet';
-const DB_VER = 1;
+const DB_VER = 2; // 2: catimg を追加
 let dbp;
 
 function open() {
@@ -15,6 +16,7 @@ function open() {
         if (!d.objectStoreNames.contains('items')) d.createObjectStore('items', { keyPath: 'id' });
         if (!d.objectStoreNames.contains('saves')) d.createObjectStore('saves', { keyPath: 'slot' });
         if (!d.objectStoreNames.contains('kv')) d.createObjectStore('kv');
+        if (!d.objectStoreNames.contains('catimg')) d.createObjectStore('catimg');
       };
       req.onsuccess = () => resolve(req.result);
       req.onerror = () => reject(req.error);
@@ -39,6 +41,9 @@ export const db = {
   get: (store, key) => tx(store, 'readonly', (s) => s.get(key)),
   put: (store, val, key) => tx(store, 'readwrite', (s) => (key === undefined ? s.put(val) : s.put(val, key))),
   del: (store, key) => tx(store, 'readwrite', (s) => s.delete(key)),
+  clear: (store) => tx(store, 'readwrite', (s) => s.clear()),
+  // [key, val] の組をまとめて1回のトランザクションで書く（カタログ画像 1000 枚など）
+  putAll: (store, pairs) => tx(store, 'readwrite', (s) => { for (const [k, v] of pairs) s.put(v, k); }),
 };
 
 export const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
