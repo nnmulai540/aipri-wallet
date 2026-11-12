@@ -1,0 +1,116 @@
+// IndexedDB の小さなラッパー。データはすべてこの iPhone(ブラウザ) の中だけに保存する。
+//   items : 登録したQR（コーデ/チャンス/フレンド）。1件に QR を1〜3個持つ
+//   saves : セーブコード（slot 1 / 2）
+//   kv    : 設定・プレイリスト・フレンド名の記憶・フォントなど
+const DB_NAME = 'aipri-wallet';
+const DB_VER = 1;
+let dbp;
+
+function open() {
+  if (!dbp) {
+    dbp = new Promise((resolve, reject) => {
+      const req = indexedDB.open(DB_NAME, DB_VER);
+      req.onupgradeneeded = () => {
+        const d = req.result;
+        if (!d.objectStoreNames.contains('items')) d.createObjectStore('items', { keyPath: 'id' });
+        if (!d.objectStoreNames.contains('saves')) d.createObjectStore('saves', { keyPath: 'slot' });
+        if (!d.objectStoreNames.contains('kv')) d.createObjectStore('kv');
+      };
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
+  }
+  return dbp;
+}
+
+async function tx(store, mode, fn) {
+  const d = await open();
+  return new Promise((resolve, reject) => {
+    const t = d.transaction(store, mode);
+    const r = fn(t.objectStore(store));
+    t.oncomplete = () => resolve(r && 'result' in r ? r.result : undefined);
+    t.onerror = () => reject(t.error);
+    t.onabort = () => reject(t.error);
+  });
+}
+
+export const db = {
+  all: (store) => tx(store, 'readonly', (s) => s.getAll()),
+  get: (store, key) => tx(store, 'readonly', (s) => s.get(key)),
+  put: (store, val, key) => tx(store, 'readwrite', (s) => (key === undefined ? s.put(val) : s.put(val, key))),
+  del: (store, key) => tx(store, 'readwrite', (s) => s.delete(key)),
+};
+
+export const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+
+// ---- 設定 ----
+const DEFAULT_SETTINGS = { libraryView: 'grid', brightHint: true, keepAwake: true };
+export async function getSettings() {
+  return { ...DEFAULT_SETTINGS, ...((await db.get('kv', 'settings')) || {}) };
+}
+export async function setSettings(patch) {
+  const s = { ...(await getSettings()), ...patch };
+  await db.put('kv', s, 'settings');
+  return s;
+}
+
+// ---- プレイリスト（items の id の並び） ----
+export async function getPlaylist() {
+  const ids = (await db.get('kv', 'playlist')) || [];
+  return ids;
+}
+export const setPlaylist = (ids) => db.put('kv', ids, 'playlist');
+
+// ---- 一度入力したフレンド名を覚えておく（登録時にリストから選べるように） ----
+export async function getFriendNames() {
+  return (await db.get('kv', 'friendNames')) || [];
+}
+export async function rememberFriendName(name) {
+  name = (name || '').trim();
+  if (!name) return;
+  const list = (await getFriendNames()).filter((n) => n !== name);
+  list.unshift(name);
+  await db.put('kv', list.slice(0, 200), 'friendNames');
+}
+
+// ---- 保存領域を消されにくくする（iOS のストレージ整理対策） ----
+export async function requestPersist() {
+  try { if (navigator.storage?.persist) await navigator.storage.persist(); } catch { /* 未対応なら何もしない */ }
+}
+
+// ---- バックアップ（書き出し／読み込み）。パソコン⇔スマホの受け渡しにも使う ----
+const blobToDataURL = (b) => new Promise((res) => { const r = new FileReader(); r.onload = () => res(r.result); r.readAsDataURL(b); });
+const dataURLToBlob = async (u) => (await fetch(u)).blob();
+
+export async function exportBackup() {
+  const items = await db.all('items');
+  for (const it of items) if (it.image instanceof Blob) it.image = await blobToDataURL(it.image);
+  return {
+    app: 'aipri-wallet', format: 1, exportedAt: new Date().toISOString(),
+    items,
+    saves: await db.all('saves'),
+    playlist: await getPlaylist(),
+    friendNames: await getFriendNames(),
+    settings: await getSettings(),
+  };
+}
+
+// 既存データに「追加・上書き」する。同じ id は更新日時が新しい方を残す
+export async function importBackup(data) {
+  if (!data || data.app !== 'aipri-wallet') throw new Error('アイプリウォレットのバックアップファイルではないみたい');
+  let added = 0, updated = 0;
+  for (const it of data.items || []) {
+    if (typeof it.image === 'string' && it.image.startsWith('data:')) it.image = await dataURLToBlob(it.image);
+    const cur = await db.get('items', it.id);
+    if (!cur) { await db.put('items', it); added++; }
+    else if ((it.updatedAt || 0) > (cur.updatedAt || 0)) { await db.put('items', it); updated++; }
+  }
+  for (const s of data.saves || []) {
+    const cur = await db.get('saves', s.slot);
+    if (!cur || (s.updatedAt || 0) > (cur.updatedAt || 0)) await db.put('saves', s);
+  }
+  // プレイリストは今のものが空のときだけ取り込む（今日の並びを壊さないため）
+  if ((await getPlaylist()).length === 0 && Array.isArray(data.playlist)) await setPlaylist(data.playlist);
+  for (const n of [...(data.friendNames || [])].reverse()) await rememberFriendName(n);
+  return { added, updated };
+}
