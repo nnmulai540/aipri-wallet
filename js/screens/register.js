@@ -2,7 +2,7 @@
 // ⑰ パソコンでQR登録（?pc=1）：同じ処理を3列で。画像をまとめてドラッグ → 1まいずつ ほぞんして つぎへ／スキップ
 import { db, uid, getFriendNames, rememberFriendName } from '../db.js';
 import { loadImage, decodeCanvas, guessParts, makeThumb, PARTS } from '../qr.js';
-import { h, fill, icon, header, pickFile, toast, busy, KIND } from '../ui.js';
+import { h, fill, icon, header, toast, busy, fileButton, KIND } from '../ui.js';
 import { syncNow, getSyncConfig, syncReady } from '../sync.js';
 import { openRange } from './range.js';
 import { openPicker } from './picker.js';
@@ -34,11 +34,6 @@ export default async function register(ctx) {
   let alive = true;
   ctx.onLeave = () => { alive = false; if (st.imgUrl) URL.revokeObjectURL(st.imgUrl); };
 
-  async function load(capture) {
-    const file = await pickFile({ accept: 'image/*', capture });
-    if (!file) return;
-    await loadFile(file);
-  }
   // cached: 先に読んであった結果（パソコンのまとめ読み）。あれば読み直さない
   async function loadFile(file, cached = null) {
     await busy('よみとり中…', async () => {
@@ -122,11 +117,15 @@ export default async function register(ctx) {
           q.status === 'done' ? 'ほぞんしたよ' : q.status === 'skip' ? 'スキップ'
             : !q.recs ? 'よみとり中…' : q.recs.length ? `QR ${q.recs.length}こ見つかった` : '見つからなかった')))));
   }
-  const dropZone = h('div', { class: 'drop' },
+  // 枠ぜんたいを本物のファイル選択（label の中の input）にする。タップで直接ひらくので iPhone でも確実
+  const dropInput = h('input', { type: 'file', accept: 'image/*', multiple: true, class: 'drop-input',
+    onchange: () => { addFiles([...dropInput.files]); dropInput.value = ''; } });
+  const dropZone = h('label', { class: 'drop' },
+    dropInput,
     icon('upload', 'width="28" height="28"'),
     h('span', {}, '画像をここにドラッグ'),
     h('small', {}, 'まとめて何まいでもOK'),
-    h('button', { class: 'btn pink', onclick: async () => addFiles((await pickFile({ accept: 'image/*', multiple: true })) || []) }, 'ファイルをえらぶ'));
+    h('span', { class: 'btn pink' }, 'ファイルをえらぶ'));
   if (pc) {
     // 画面のどこに落としても受け取る
     root.addEventListener('dragover', (e) => { e.preventDefault(); dropZone.classList.add('over'); });
@@ -260,8 +259,8 @@ export default async function register(ctx) {
     fill(root, 
       header({ title: 'QRをとりこむ' }),
       h('div', { class: 'two-btns' },
-        h('button', { class: 'btn pink', onclick: () => load(false) }, '画像からえらぶ'),
-        h('button', { class: 'btn outline', onclick: () => load(true) }, 'カメラでとる')),
+        fileButton({ cls: 'btn pink', label: '画像からえらぶ', onFiles: ([f]) => loadFile(f) }),
+        fileButton({ cls: 'btn outline', label: 'カメラでとる', capture: true, onFiles: ([f]) => loadFile(f) })),
       previewCard(),
       partRows(),
       h('h2', { class: 'sec-title' }, 'しゅるい'),

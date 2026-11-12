@@ -99,12 +99,20 @@ export async function busy(msg, fn) {
 // ---- ファイル選択（画像・カメラ・JSON・フォント） ----
 export function pickFile({ accept = 'image/*', capture = false, multiple = false } = {}) {
   return new Promise((resolve) => {
-    const input = h('input', { type: 'file', accept, capture: capture ? 'environment' : null, multiple: multiple || null, style: 'display:none' });
+    // display:none だと iPhone で選択メニューが開かないことがあるので、画面の外に置いて見えなくする
+    const input = h('input', { type: 'file', accept, capture: capture ? 'environment' : null, multiple: multiple || null, style: 'position:fixed;left:-9999px;top:0;width:1px;height:1px;opacity:0' });
     input.addEventListener('change', () => { resolve(multiple ? [...input.files] : input.files[0] || null); input.remove(); });
     // キャンセル時に change が来ないブラウザがあるが、その場合は何もしないだけなので問題ない
     document.body.append(input);
     input.click();
   });
+}
+
+// タップで直接ひらくファイル選択ボタン（label の中に本物の input）。iPhone ではこれがいちばん確実
+export function fileButton({ cls = 'btn', label, accept = 'image/*', capture = false, multiple = false, onFiles }) {
+  const input = h('input', { type: 'file', accept, capture: capture ? 'environment' : null, multiple: multiple || null, class: 'drop-input',
+    onchange: () => { const fs = [...input.files]; input.value = ''; if (fs.length) onFiles(fs); } });
+  return h('label', { class: cls + ' file-btn', role: 'button' }, input, label);
 }
 
 // ---- 長押し（一覧で長押し → 詳細・編集） ----
