@@ -7,7 +7,8 @@ export default async function home() {
   const items = new Map((await db.all('items')).map((it) => [it.id, it]));
   const pl = ids.map((id) => items.get(id)).filter(Boolean);
   const saves = new Map((await db.all('saves')).map((x) => [x.slot, x]));
-  const saveSub = (n) => (saves.get(n)?.charName ? h('small', { class: 'name' }, saves.get(n).charName) : h('small', {}, 'タップで表示'));
+  // キャラ名だけを大きく出す。名前がまだ無いときだけ「セーブ1」などを出す
+  const saveLabel = (n) => h('span', { class: 'name' }, saves.get(n)?.charName || `セーブ ${n}`);
 
   const thumbs = pl.slice(0, 3).map((it, i) =>
     h('a', { class: 'pl-thumb', href: `#/view?play=1&i=${i}` },
@@ -23,8 +24,8 @@ export default async function home() {
 
     h('h2', { class: 'sec-title' }, icon('star'), 'セーブコード'),
     h('div', { class: 'save-btns' },
-      h('button', { class: 'save-btn s1', onclick: () => go('/save?slot=1') }, 'セーブ 1', saveSub(1)),
-      h('button', { class: 'save-btn s2', onclick: () => go('/save?slot=2') }, 'セーブ 2', saveSub(2))),
+      h('button', { class: 'save-btn s1', 'aria-label': 'セーブ 1', onclick: () => go('/save?slot=1') }, saveLabel(1)),
+      h('button', { class: 'save-btn s2', 'aria-label': 'セーブ 2', onclick: () => go('/save?slot=2') }, saveLabel(2))),
 
     h('section', { class: 'card' },
       h('div', { class: 'pl-head' },
