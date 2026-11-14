@@ -1,6 +1,6 @@
 // オフラインでも即起動できるよう、アプリ本体を事前キャッシュする。
 // ファイルを変更したら VERSION を上げること（古いキャッシュが消えて更新される）。
-const VERSION = 'v14';
+const VERSION = 'v15';
 const SHELL = `shell-${VERSION}`;
 // 同梱フォント（合計 8MB 近い）は使ったときにだけ取り、本体とは別のキャッシュに置いて版を上げても消さない
 const FONTS = 'fonts-v2';

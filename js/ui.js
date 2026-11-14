@@ -140,11 +140,14 @@ export function blobUrl(blob) {
   return urlCache.get(blob);
 }
 // フレンドの写真：たて長・よこ長どちらも枠に全体をおさめ（contain）、すき間には同じ写真をぼかして敷く
+// 読めない画像（壊れた Blob など）は、くずれたアイコンを出さずに隠す
+const hideBroken = (img) => img.addEventListener('error', () => { img.style.visibility = 'hidden'; });
+
 export function photoBox(blobOrSrc, alt = '') {
   const src = typeof blobOrSrc === 'string' ? blobOrSrc : blobUrl(blobOrSrc);
-  return h('div', { class: 'photo-box' },
-    h('img', { class: 'blur', src, alt: '', 'aria-hidden': 'true' }),
-    h('img', { class: 'main', src, alt }));
+  const imgs = [h('img', { class: 'blur', src, alt: '', 'aria-hidden': 'true' }), h('img', { class: 'main', src, alt })];
+  imgs.forEach(hideBroken);
+  return h('div', { class: 'photo-box' }, imgs);
 }
 
 export function thumb(item, idx = 0, { noImgText = true } = {}) {

@@ -39,12 +39,25 @@ async function tx(store, mode, fn) {
 export const db = {
   all: (store) => tx(store, 'readonly', (s) => s.getAll()),
   get: (store, key) => tx(store, 'readonly', (s) => s.get(key)),
-  put: (store, val, key) => tx(store, 'readwrite', (s) => (key === undefined ? s.put(val) : s.put(val, key))),
+  put: async (store, val, key) => {
+    if (store === 'items') await detachBlobs(val);
+    return tx(store, 'readwrite', (s) => (key === undefined ? s.put(val) : s.put(val, key)));
+  },
   del: (store, key) => tx(store, 'readwrite', (s) => s.delete(key)),
   clear: (store) => tx(store, 'readwrite', (s) => s.clear()),
   // [key, val] の組をまとめて1回のトランザクションで書く（カタログ画像 1000 枚など）
   putAll: (store, pairs) => tx(store, 'readwrite', (s) => { for (const [k, v] of pairs) s.put(v, k); }),
 };
+
+// iPhone(Safari) では、IndexedDB から読んだ Blob は保存ファイルへの参照になっていて、
+// それをそのまま同じレコードに書き戻すと元ファイルが消され、画像が壊れる（フレンドのコーデ名を変えると写真が消えた）。
+// 書く前に中身をメモリに読み込んだ新しい Blob に置きかえる。もう壊れているものは外す
+async function detachBlobs(it) {
+  for (const k of ['image', 'photo']) {
+    if (!(it?.[k] instanceof Blob)) continue;
+    try { it[k] = new Blob([await it[k].arrayBuffer()], { type: it[k].type }); } catch { delete it[k]; }
+  }
+}
 
 export const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
 
@@ -93,12 +106,17 @@ export async function requestPersist() {
 }
 
 // ---- バックアップ（書き出し／読み込み）。パソコン⇔スマホの受け渡しにも使う ----
-const blobToDataURL = (b) => new Promise((res) => { const r = new FileReader(); r.onload = () => res(r.result); r.readAsDataURL(b); });
+// 壊れた Blob（上の Safari の件）は読めないので null を返す（止まらないように）
+const blobToDataURL = (b) => new Promise((res) => { const r = new FileReader(); r.onload = () => res(r.result); r.onerror = () => res(null); r.readAsDataURL(b); });
 export const dataURLToBlob = async (u) => (await fetch(u)).blob();
 // items の中の画像（コーデの縮小画像 image・フレンドの写真 photo）を JSON にできる形と Blob の間で変換する
 const BLOB_FIELDS = ['image', 'photo'];
 export async function blobsToText(it) {
-  for (const k of BLOB_FIELDS) if (it[k] instanceof Blob) it[k] = await blobToDataURL(it[k]);
+  for (const k of BLOB_FIELDS) {
+    if (!(it[k] instanceof Blob)) continue;
+    const u = await blobToDataURL(it[k]);
+    if (u) it[k] = u; else delete it[k];
+  }
 }
 export async function textToBlobs(it) {
   for (const k of BLOB_FIELDS) if (typeof it[k] === 'string' && it[k].startsWith('data:')) it[k] = await dataURLToBlob(it[k]);
