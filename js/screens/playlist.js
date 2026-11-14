@@ -1,16 +1,20 @@
-// ⑫ プレイリストへんしゅう：並べかえ（≡をドラッグ）・外す（×）・コーデをついか・このじゅんばんで表示
+// ⑫ プレイリスト：ぜんぶの並びを見る。名前を押すとそこからQR表示・並べかえ（≡をドラッグ）・外す（×）・コーデをついか（ふだんはたたむ）
 import { db, getPlaylist, setPlaylist } from '../db.js';
 import { partLabel } from '../qr.js';
-import { h, icon, go, header, thumb, nameClass, toast } from '../ui.js';
+import { h, fill, icon, go, header, thumb, nameClass, toast } from '../ui.js';
 
-export default async function playlist() {
+export default async function playlist(ctx) {
   const items = (await db.all('items')).filter((it) => it.kind !== 'save').sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
   const map = new Map(items.map((it) => [it.id, it]));
   let ids = (await getPlaylist()).filter((id) => map.has(id));
   let q = '';
+  let addOpen = ids.length === 0; // 空っぽのときは最初から開いておく
+  let undoTimer = null;
   const root = h('div', { class: 'screen' });
   const rowsBox = h('div', { class: 'pl-rows' });
   const addBox = h('div', { class: 'add-grid' });
+  const addSec = h('div', { class: 'add-sec' });
+  const undoBar = h('div', { class: 'undo-bar', role: 'status' });
 
   const commit = async () => { await setPlaylist(ids); };
   const parts = (it) => (it.qrs || []).map((x) => (it.qrs.length === 1 && x.part === 'full' ? 'フルコーデ' : partLabel(x.part))).join(' / ');
@@ -25,16 +29,35 @@ export default async function playlist() {
       const grip = h('button', { class: 'grip', 'aria-label': 'ドラッグで並べかえ' }, icon('grip'));
       const row = h('div', { class: 'pl-row', 'data-id': id },
         h('span', { class: 'n' }, i + 1),
-        thumb(it, i, { noImgText: false }),
-        h('div', { class: 'body' },
-          h('div', { class: 'name ' + nameClass(it) }, it.name || '（なまえなし）'),
-          h('div', { class: 'meta' }, parts(it))),
-        h('button', { class: 'x', 'aria-label': 'はずす', onclick: async () => { ids = ids.filter((x) => x !== id); await commit(); drawRows(); drawAdd(); } }, icon('close')),
+        // サムネと名前のところを押すと、このコーデからQR表示（そのあとは続きを順番に）
+        h('button', { class: 'open', 'aria-label': `${it.name || ''} のQRを表示`, onclick: () => go(`/view?play=1&i=${i}`) },
+          thumb(it, i, { noImgText: false }),
+          h('div', { class: 'body' },
+            h('div', { class: 'name ' + nameClass(it) }, it.name || '（なまえなし）'),
+            h('div', { class: 'meta' }, parts(it)))),
+        h('button', { class: 'x', 'aria-label': 'はずす', onclick: () => remove(id) }, icon('close')),
         grip);
       dragSort(grip, row);
       return row;
     }));
   }
+
+  // ゲーム中の押しまちがいに備えて、外したあと少しのあいだ「もどす」を出す
+  async function remove(id) {
+    const at = ids.indexOf(id);
+    ids = ids.filter((x) => x !== id);
+    await commit(); drawRows(); drawAdd();
+    const name = map.get(id)?.name || '（なまえなし）';
+    fill(undoBar, h('span', {}, `「${name}」をはずしたよ`),
+      h('button', { class: 'chip', onclick: async () => {
+        if (!ids.includes(id)) ids.splice(Math.min(at, ids.length), 0, id);
+        await commit(); drawRows(); drawAdd(); hideUndo();
+      } }, icon('undo'), 'もどす'));
+    undoBar.classList.add('show');
+    clearTimeout(undoTimer);
+    undoTimer = setTimeout(hideUndo, 5000);
+  }
+  function hideUndo() { clearTimeout(undoTimer); undoBar.classList.remove('show'); }
 
   // ≡ を押したまま上下に動かすと並べかわる。DOM を直接入れかえ、指を離したら保存
   function dragSort(grip, row) {
@@ -80,8 +103,21 @@ export default async function playlist() {
     if (!list.length) addBox.replaceChildren(h('div', { class: 'empty', style: 'grid-column:1/-1' }, items.length ? 'みつからなかったよ' : 'まだ登録がないよ'));
   }
 
+  // 「コーデをついか」はふだんたたんでおき、押したときだけ検索と一覧を出す
+  function drawAddSec() {
+    fill(addSec,
+      h('button', { class: 'add-toggle', 'aria-expanded': String(addOpen), onclick: () => { addOpen = !addOpen; drawAddSec(); } },
+        icon(addOpen ? 'close' : 'plus'), addOpen ? 'ついかをとじる' : 'コーデをついか'),
+      addOpen ? [
+        h('div', { class: 'search' }, icon('search'), h('input', { type: 'search', placeholder: 'なまえでさがす', 'aria-label': 'なまえでさがす', value: q, oninput: (e) => { q = e.target.value.trim(); drawAdd(); } })),
+        addBox,
+      ] : null);
+  }
+
   drawRows();
   drawAdd();
+  drawAddSec();
+  ctx.onLeave = () => clearTimeout(undoTimer);
   root.append(
     header({
       title: 'プレイリスト',
@@ -91,11 +127,10 @@ export default async function playlist() {
       } }, 'ぜんぶ外す')],
     }),
     rowsBox,
-    h('h2', { class: 'sec-title' }, 'コーデをついか'),
-    h('div', { class: 'search' }, icon('search'), h('input', { type: 'search', placeholder: 'なまえでさがす', 'aria-label': 'なまえでさがす', oninput: (e) => { q = e.target.value.trim(); drawAdd(); } })),
-    addBox,
+    addSec,
+    undoBar,
     h('div', { class: 'sticky-bottom' },
-      h('button', { class: 'btn primary block', onclick: () => (ids.length ? go('/view?play=1') : toast('コーデをついかしてね')) }, icon('play'), 'このじゅんばんで表示する')),
+      h('button', { class: 'btn primary block', onclick: () => (ids.length ? go('/view?play=1') : toast('コーデをついかしてね')) }, icon('play'), 'はじめから表示する')),
   );
   return root;
 }

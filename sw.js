@@ -1,8 +1,9 @@
 // オフラインでも即起動できるよう、アプリ本体を事前キャッシュする。
 // ファイルを変更したら VERSION を上げること（古いキャッシュが消えて更新される）。
-const VERSION = 'v10';
+const VERSION = 'v12';
 const SHELL = `shell-${VERSION}`;
-const FONTS = 'fonts-v1';
+// 同梱フォント（合計 8MB 近い）は使ったときにだけ取り、本体とは別のキャッシュに置いて版を上げても消さない
+const FONTS = 'fonts-v2';
 
 const FILES = [
   './', 'index.html', 'manifest.webmanifest', 'css/app.css',
@@ -31,21 +32,21 @@ self.addEventListener('fetch', (e) => {
   const url = new URL(e.request.url);
   if (e.request.method !== 'GET') return;
 
-  // Google Fonts は一度読んだらキャッシュ優先（ゲーセンで電波がなくても表示できるように）
-  if (url.hostname === 'fonts.googleapis.com' || url.hostname === 'fonts.gstatic.com') {
+  if (url.origin !== location.origin) return;
+
+  // 同梱フォントは一度読んだらキャッシュ優先（ゲーセンで電波がなくても表示できるように）
+  if (url.pathname.includes('/fonts/') && url.pathname.endsWith('.woff2')) {
     e.respondWith(
       caches.open(FONTS).then(async (c) => {
-        const hit = await c.match(e.request);
+        const hit = await c.match(e.request, { ignoreSearch: true });
         if (hit) return hit;
         const res = await fetch(e.request);
-        if (res.ok || res.type === 'opaque') c.put(e.request, res.clone());
+        if (res.ok) c.put(e.request, res.clone());
         return res;
       })
     );
     return;
   }
-
-  if (url.origin !== location.origin) return;
   // アプリ本体はキャッシュ優先。画面遷移(#付き)は index.html を返す
   e.respondWith(
     caches.match(e.request, { ignoreSearch: true }).then((hit) => {

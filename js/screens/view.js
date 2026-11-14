@@ -1,7 +1,7 @@
 // ② QR表示：コーデ1件、またはプレイリストを順番に。スワイプ／まえ・つぎ で切り替え
 import { db, getPlaylist, getSettings } from '../db.js';
 import { qrSvg, partLabel } from '../qr.js';
-import { h, fill, icon, back, header, keepAwake, KIND } from '../ui.js';
+import { h, fill, icon, back, header, keepAwake, thumb, KIND } from '../ui.js';
 
 export default async function view(ctx) {
   const settings = await getSettings();
@@ -58,6 +58,10 @@ export default async function view(ctx) {
       h('div', { class: 'nav-btns' },
         h('button', { class: 'btn outline', disabled: idx === 0, onclick: () => move(-1) }, icon('back'), 'まえ'),
         h('button', { class: 'btn primary', onclick: () => (nxt ? move(1) : back()) }, nextLabel, nxt ? icon('next') : null)),
+      // コーデ・チャンスコードは、どのコーデかを確かめられるよう小さく画像を添える（QRより下なので読み取りの邪魔にならない）
+      (it.kind === 'coord' || it.kind === 'chance') && (it.catalogId || it.image)
+        ? h('div', { class: 'qr-coord' }, thumb(it, ii, { noImgText: false }))
+        : null,
       settings.brightHint
         ? h('div', { class: 'note' }, icon('sun'), h('span', {}, '画面の明るさを最大にしてね', settings.keepAwake ? h('br') : null, settings.keepAwake ? 'この画面のあいだはスリープしません' : null))
         : null,

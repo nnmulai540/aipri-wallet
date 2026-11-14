@@ -30,7 +30,7 @@ export default async function home() {
     h('section', { class: 'card' },
       h('div', { class: 'pl-head' },
         h('h2', { class: 'sec-title', style: 'margin:0' }, icon('music'), 'きょうのプレイリスト'),
-        h('a', { href: '#/playlist', style: 'font-size:15px' }, 'へんしゅう')),
+        h('a', { href: '#/playlist', style: 'font-size:15px' }, 'ぜんぶ見る')),
       h('div', { class: 'pl-thumbs' }, thumbs),
       h('button', { class: 'btn primary block', disabled: pl.length === 0, onclick: () => go('/view?play=1') },
         icon('play'), pl.length ? 'はじめから表示する' : 'コーデをついかしてね')),

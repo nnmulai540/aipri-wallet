@@ -179,20 +179,21 @@ export async function decodeRegion(canvas, rect) {
   return [];
 }
 
-// ---- パーツの自動振り分け（配布画像の配置：上=アクセ / 真ん中=ワンピ / 下=シューズ） ----
+// ---- パーツの自動振り分け（配布画像の配置：上から アクセ / ワンピース / シューズ。
+//      4つあるとき＝プリマジなどトップスとボトムスが分かれているコーデは アクセ / トップス / ボトムス / シューズ） ----
 export function guessParts(recs) {
   if (recs.length === 1) return ['full'];
   const order = recs.map((r, i) => [r.box.y + r.box.h / 2, i]).sort((a, b) => a[0] - b[0]).map((v) => v[1]);
-  const seq = ['acce', 'onepiece', 'shoes'];
+  const seq = recs.length >= 4 ? ['acce', 'tops', 'bottoms', 'shoes'] : ['acce', 'onepiece', 'shoes'];
   const parts = new Array(recs.length).fill('full');
   order.forEach((idx, rank) => { parts[idx] = seq[rank] || 'full'; });
   return parts;
 }
 
 export const PARTS = [
-  ['acce', 'アクセ'], ['onepiece', 'ワンピ'], ['shoes', 'シューズ'], ['full', 'フル'],
+  ['acce', 'アクセ'], ['onepiece', 'ワンピース'], ['tops', 'トップス'], ['bottoms', 'ボトムス'], ['shoes', 'シューズ'], ['full', 'フルコーデ'],
 ];
-export const partLabel = (p) => (PARTS.find((x) => x[0] === p) || [, 'フル'])[1];
+export const partLabel = (p) => (PARTS.find((x) => x[0] === p) || [, 'フルコーデ'])[1];
 
 // ---- 表示用SVG（真っ白な背景・余白4モジュール） ----
 export function qrSvg(rec, { quiet = 4, className = 'qr', label = 'QRコード' } = {}) {
