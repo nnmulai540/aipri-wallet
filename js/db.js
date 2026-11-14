@@ -95,10 +95,18 @@ export async function requestPersist() {
 // ---- バックアップ（書き出し／読み込み）。パソコン⇔スマホの受け渡しにも使う ----
 const blobToDataURL = (b) => new Promise((res) => { const r = new FileReader(); r.onload = () => res(r.result); r.readAsDataURL(b); });
 export const dataURLToBlob = async (u) => (await fetch(u)).blob();
+// items の中の画像（コーデの縮小画像 image・フレンドの写真 photo）を JSON にできる形と Blob の間で変換する
+const BLOB_FIELDS = ['image', 'photo'];
+export async function blobsToText(it) {
+  for (const k of BLOB_FIELDS) if (it[k] instanceof Blob) it[k] = await blobToDataURL(it[k]);
+}
+export async function textToBlobs(it) {
+  for (const k of BLOB_FIELDS) if (typeof it[k] === 'string' && it[k].startsWith('data:')) it[k] = await dataURLToBlob(it[k]);
+}
 
 export async function exportBackup() {
   const items = await db.all('items');
-  for (const it of items) if (it.image instanceof Blob) it.image = await blobToDataURL(it.image);
+  for (const it of items) await blobsToText(it);
   return {
     app: 'aipri-wallet', format: 1, exportedAt: new Date().toISOString(),
     items,
@@ -114,7 +122,7 @@ export async function importBackup(data) {
   if (!data || data.app !== 'aipri-wallet') throw new Error('アイプリウォレットのバックアップファイルではないみたい');
   let added = 0, updated = 0;
   for (const it of data.items || []) {
-    if (typeof it.image === 'string' && it.image.startsWith('data:')) it.image = await dataURLToBlob(it.image);
+    await textToBlobs(it);
     const cur = await db.get('items', it.id);
     if (!cur) { await db.put('items', it); added++; }
     else if ((it.updatedAt || 0) > (cur.updatedAt || 0)) { await db.put('items', it); updated++; }

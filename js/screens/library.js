@@ -1,7 +1,9 @@
 // ④ 一覧（ならべる=3列 / リスト=1列 は設定で切り替え）。タップでQR表示、長押しで詳細・編集
+//   チャンスコード（⑥）はゲットした部位つきの1列、フレンド（⑧）は写真つきの2列で、見た目の設定にはよらない
 import { db, getSettings, setSettings } from '../db.js';
 import { partLabel } from '../qr.js';
 import { h, icon, go, header, thumb, onPress, nameClass, danFilter, LIST_TITLE } from '../ui.js';
+import { CHANCE_PARTS } from './view.js';
 import { danLabel, preloadCatalogImgs, seriesOf, getCatalog, SERIES } from '../catalog.js';
 
 export default async function library(ctx) {
@@ -31,6 +33,7 @@ export default async function library(ctx) {
     SORTS.map(([k, l]) => h('option', { value: k, selected: sort === k ? 'selected' : null }, l)));
 
   let favOnly = false;
+  let used = 'all'; // チャンスコード：all / not（まだつかってない）/ used（つかった）
   let q = '';
   const body = h('div');
   const searchBox = h('div', { class: 'search hidden' },
@@ -39,8 +42,14 @@ export default async function library(ctx) {
 
   // シリーズ・だん の絞り込みに、おきにいりだけ表示（ハート）を重ねがけできる
   const filter = danFilter(all, () => draw(), {
-    extra: () => h('button', { class: 'chip' + (favOnly ? ' on' : ''), 'aria-label': 'おきにいり', 'aria-pressed': String(favOnly),
-      onclick: () => { favOnly = !favOnly; filter.redraw(); draw(); } }, icon('heart', 'style="color:var(--pink)"')),
+    extra: () => [
+      h('button', { class: 'chip' + (favOnly ? ' on' : ''), 'aria-label': 'おきにいり', 'aria-pressed': String(favOnly),
+        onclick: () => { favOnly = !favOnly; filter.redraw(); draw(); } }, icon('heart', 'style="color:var(--pink)"')),
+      // チャンスコード：まだつかってない／つかった（もう一度押すと解除）
+      kind === 'chance' ? [['not', 'まだ'], ['used', 'つかった']].map(([k, l]) =>
+        h('button', { class: 'chip' + (used === k ? ' on' : ''), 'aria-pressed': String(used === k),
+          onclick: () => { used = used === k ? 'all' : k; filter.redraw(); draw(); } }, l)) : null,
+    ],
   });
 
   async function toggleFav(it, btn) {
@@ -61,7 +70,8 @@ export default async function library(ctx) {
   function draw() {
     let list = all.filter(filter.test).sort(compare[sort]);
     if (favOnly) list = list.filter((it) => it.favorite);
-    if (q) list = list.filter((it) => (it.name || '').includes(q) || (it.friendName || '').includes(q));
+    if (q) list = list.filter((it) => [it.name, it.friendName, it.coordName].some((s) => (s || '').includes(q)));
+    if (kind === 'chance' && used !== 'all') list = list.filter((it) => (used === 'used') === !!(it.got || []).length);
 
     if (!list.length) {
       body.replaceChildren(h('div', { class: 'empty' },
@@ -69,7 +79,34 @@ export default async function library(ctx) {
         all.length ? null : h('button', { class: 'btn pink', onclick: () => go('/register?kind=' + kind) }, icon('plus'), 'QRをとりこむ')));
       return;
     }
-    if (settings.libraryView === 'list') {
+    if (kind === 'chance') {
+      body.replaceChildren(h('div', { class: 'lib-list' }, list.map((it, i) => {
+        const got = new Set(it.got || []);
+        const row = h('div', { class: 'lib-row chance-row', role: 'button', tabindex: '0' },
+          thumb(it, i),
+          h('div', { class: 'body' },
+            h('div', { class: 'name-line' },
+              h('div', { class: 'name ' + nameClass(it) }, it.name || '（なまえなし）'),
+              got.size === CHANCE_PARTS.length ? h('span', { class: 'badge-comp' }, 'コンプリート') : !got.size ? h('span', { class: 'badge-yet' }, 'まだ') : null),
+            h('div', { class: 'meta' }, got.size ? 'ゲットした部位' : 'まだつかってないよ'),
+            h('div', { class: 'got-chips' }, CHANCE_PARTS.map(([k, l]) => h('span', { class: 'got-chip' + (got.has(k) ? ' on' : '') }, got.has(k) ? icon('check') : null, l)))),
+          favBtn(it));
+        onPress(row, { tap: () => go('/view?item=' + it.id), long: () => go('/item/' + it.id) });
+        return row;
+      })));
+    } else if (kind === 'friend') {
+      body.replaceChildren(h('div', { class: 'friend-grid' }, list.map((it, i) => {
+        const t = thumb(it, i);
+        t.append(favBtn(it));
+        const card = h('div', { class: 'friend-item', role: 'button', tabindex: '0' }, t,
+          h('span', { class: 'fname free-font' }, it.friendName || it.name || '（なまえなし）'),
+          it.coordName
+            ? h('span', { class: 'coord-chip ' + (it.coordNameSource === 'catalog' ? 'head-font' : 'free-font') }, it.coordName)
+            : h('span', { class: 'coord-chip none' }, '＋ コーデをとうろく'));
+        onPress(card, { tap: () => go('/view?item=' + it.id), long: () => go('/item/' + it.id) });
+        return card;
+      })));
+    } else if (settings.libraryView === 'list') {
       body.replaceChildren(h('div', { class: 'lib-list' }, list.map((it, i) => {
         const row = h('div', { class: 'lib-row' },
           thumb(it, i),
@@ -105,7 +142,7 @@ export default async function library(ctx) {
     searchBox,
     filter.el,
     h('div', { class: 'sort-row' },
-      h('p', { class: 'hint' }, settings.libraryView === 'list' ? '長押しでへんしゅう' : 'タップでQRを表示・長押しでへんしゅう'),
+      h('p', { class: 'hint' }, settings.libraryView === 'list' && kind === 'coord' ? '長押しでへんしゅう' : 'タップでQRを表示・長押しでへんしゅう'),
       sortSel),
     body,
   );

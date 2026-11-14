@@ -243,3 +243,55 @@ export function makeThumb(canvas, maxW = 420) {
   const c = scaled(canvas, s);
   return new Promise((res) => c.toBlob(res, 'image/jpeg', 0.82));
 }
+
+// ---- フレンドカードの写真の切り出し ----
+// 公式のフレンドカード画像はレイアウトが決まっているので、読み取ったQRの位置と大きさ（s）から写真の枠を出す。
+//   よこ長カード：QRは右側。写真はQRの左（左端 -2.31s・幅 1.69s・上端 +0.12s・高さ 1.08s）
+//   たて長カード：QRは下側。写真はQRの上（左端 0・幅 1.0s・上端 -1.99s・高さ 1.56s）
+// 見本カード2枚で測った値。保存のしかたで少しずれるので、まわりの白い余白を見て枠を合わせなおす
+export function cropFriendPhoto(canvas, box) {
+  const s = (box.w + box.h) / 2;
+  const wide = box.x + box.w / 2 > canvas.width * 0.55;
+  const est = wide
+    ? { x: box.x - 2.31 * s, y: box.y + 0.12 * s, w: 1.69 * s, h: 1.08 * s }
+    : { x: box.x, y: box.y - 1.99 * s, w: 1.0 * s, h: 1.56 * s };
+  const r = refineRect(canvas, est, s * 0.15) || est;
+  const x = Math.max(0, Math.round(r.x)), y = Math.max(0, Math.round(r.y));
+  const w = Math.min(canvas.width - x, Math.round(r.w)), h = Math.min(canvas.height - y, Math.round(r.h));
+  if (w < 16 || h < 16) return null;
+  // 大きすぎると同期のデータが重くなるので、長い辺 600px までに縮める
+  const k = Math.min(1, 600 / Math.max(w, h));
+  const c = document.createElement('canvas');
+  c.width = Math.round(w * k); c.height = Math.round(h * k);
+  const ctx = c.getContext('2d');
+  ctx.imageSmoothingQuality = 'high';
+  ctx.drawImage(canvas, x, y, w, h, 0, 0, c.width, c.height);
+  return { canvas: c, wide: c.width > c.height };
+}
+
+// 見積もった枠のまわり（margin）で「白っぽくない画素が6割以上ある行・列」の範囲を写真とみなす。
+// 見積もりから大きく外れたら（背景の模様にひっぱられたなど）使わない
+function refineRect(canvas, est, margin) {
+  const x0 = Math.max(0, Math.floor(est.x - margin)), y0 = Math.max(0, Math.floor(est.y - margin));
+  const x1 = Math.min(canvas.width, Math.ceil(est.x + est.w + margin)), y1 = Math.min(canvas.height, Math.ceil(est.y + est.h + margin));
+  const w = x1 - x0, h = y1 - y0;
+  if (w < 16 || h < 16) return null;
+  const d = canvas.getContext('2d', { willReadFrequently: true }).getImageData(x0, y0, w, h).data;
+  const cols = new Uint32Array(w), rows = new Uint32Array(h);
+  for (let j = 0; j < h; j++) {
+    for (let i = 0; i < w; i++) {
+      const p = (j * w + i) * 4;
+      if (Math.min(d[p], d[p + 1], d[p + 2]) < 200) { cols[i]++; rows[j]++; }
+    }
+  }
+  const span = (arr, n) => {
+    let a = -1, b = -1;
+    for (let i = 0; i < arr.length; i++) if (arr[i] > n * 0.6) { if (a < 0) a = i; b = i; }
+    return a < 0 ? null : [a, b];
+  };
+  const cx = span(cols, h), cy = span(rows, w);
+  if (!cx || !cy) return null;
+  const r = { x: x0 + cx[0], y: y0 + cy[0], w: cx[1] - cx[0] + 1, h: cy[1] - cy[0] + 1 };
+  const off = Math.abs(r.x - est.x) + Math.abs(r.y - est.y) + Math.abs(r.w - est.w) + Math.abs(r.h - est.h);
+  return off < margin * 3 ? r : null;
+}

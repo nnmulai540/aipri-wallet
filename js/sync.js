@@ -1,7 +1,7 @@
 // パソコン ⇔ iPhone の同期。自分の「非公開」GitHub リポジトリに data.json を1つ置き、両方の端末から読み書きする。
 // QRはカードそのもの（読めば誰でも使える）なので、公開リポジトリには絶対に置かないこと。
 // トークンはその端末の IndexedDB（kv 'sync'）にだけ保存し、バックアップにも入れない。
-import { db, exportBackup, getDeleted, setDeleted, getPlaylist, setPlaylist, rememberFriendName, dataURLToBlob } from './db.js';
+import { db, exportBackup, getDeleted, setDeleted, getPlaylist, setPlaylist, rememberFriendName, textToBlobs } from './db.js';
 
 const FILE = 'data.json';
 export const DEFAULT_REPO = 'nnmulai540/aipri-wallet-data';
@@ -69,7 +69,7 @@ async function mergeIn(data) {
     if (deleted[it.id] >= (it.updatedAt || 0)) continue;
     const cur = await db.get('items', it.id);
     if (cur && (cur.updatedAt || 0) >= (it.updatedAt || 0)) continue;
-    if (typeof it.image === 'string' && it.image.startsWith('data:')) it.image = await dataURLToBlob(it.image);
+    await textToBlobs(it);
     await db.put('items', it);
     stat[cur ? 'updated' : 'added']++;
   }

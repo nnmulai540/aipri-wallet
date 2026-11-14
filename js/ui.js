@@ -139,7 +139,20 @@ export function blobUrl(blob) {
   if (!urlCache.has(blob)) urlCache.set(blob, URL.createObjectURL(blob));
   return urlCache.get(blob);
 }
+// フレンドの写真：たて長・よこ長どちらも枠に全体をおさめ（contain）、すき間には同じ写真をぼかして敷く
+export function photoBox(blobOrSrc, alt = '') {
+  const src = typeof blobOrSrc === 'string' ? blobOrSrc : blobUrl(blobOrSrc);
+  return h('div', { class: 'photo-box' },
+    h('img', { class: 'blur', src, alt: '', 'aria-hidden': 'true' }),
+    h('img', { class: 'main', src, alt }));
+}
+
 export function thumb(item, idx = 0, { noImgText = true } = {}) {
+  if (item?.kind === 'friend' && item.photo instanceof Blob) {
+    const el = photoBox(item.photo);
+    el.classList.add('thumb');
+    return el;
+  }
   // 公式リストのコーデなら公式の全身画像を優先。フレンドは本人の写真（取り込んだ画像）を優先
   const catId = item?.kind !== 'friend' ? item?.catalogId : null;
   const own = blobUrl(item?.image);

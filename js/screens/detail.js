@@ -1,6 +1,6 @@
 // ⑭ コーデの詳細・編集：名前の変更・おきにいり・QRごとのパーツ変更/削除・QRついか・表示・削除
 import { db, deleteItem, rememberFriendName } from '../db.js';
-import { loadImage, decodeCanvas, qrSvg, PARTS } from '../qr.js';
+import { loadImage, decodeCanvas, qrSvg, cropFriendPhoto, PARTS } from '../qr.js';
 import { h, fill, icon, go, back, header, thumb, pickFile, toast, busy, nameClass, KIND } from '../ui.js';
 import { openPicker } from './picker.js';
 import { openRange } from './range.js';
@@ -53,6 +53,22 @@ export default async function detail(ctx) {
     draw();
   }
 
+  // フレンド：カード画像をえらびなおして写真を切り出す（写真の機能より前に登録したフレンド用）
+  async function retakePhoto() {
+    const file = await pickFile({ accept: 'image/*' });
+    if (!file) return;
+    const canvas = await busy('よみとり中…', () => loadImage(file));
+    const recs = await busy('よみとり中…', () => decodeCanvas(canvas));
+    const r = recs.find((x) => it.qrs.some((q) => q.text === x.text)) || recs[0];
+    const p = r && cropFriendPhoto(canvas, r.box);
+    if (!p) { toast('写真が見つからなかったよ（フレンドカードの画像をえらんでね）'); return; }
+    it.photo = await new Promise((res) => p.canvas.toBlob(res, 'image/jpeg', 0.85));
+    it.photoWide = p.wide;
+    await saveIt();
+    toast('写真をかえたよ');
+    draw();
+  }
+
   async function removeItem() {
     if (!confirm(`「${it.name || 'このデータ'}」をけす？（もとに戻せないよ）`)) return;
     await deleteItem(it.id);
@@ -91,6 +107,7 @@ export default async function detail(ctx) {
       h('h2', { class: 'sec-title' }, it.kind === 'coord' ? 'QRコードとパーツ' : 'QRコード'),
       ...rows,
       h('button', { class: 'add-dashed', onclick: addQr }, '＋ QRをついか'),
+      it.kind === 'friend' ? h('button', { class: 'add-dashed', onclick: retakePhoto }, it.photo ? '写真をカード画像からとりなおす' : 'カード画像から写真を切り出す') : null,
       h('button', { class: 'btn primary block', onclick: () => go('/view?item=' + it.id) }, icon('play'), 'QRコードを表示'),
       h('button', { class: 'danger-link', onclick: removeItem }, 'このコーデをけす'),
     );

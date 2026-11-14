@@ -1,8 +1,8 @@
 // ③ QRをとりこむ：画像（配布画像・カードの直撮り）→ 自動でQRを全部さがす → パーツ振り分け → 種類・名前 → ほぞん
 // ⑰ パソコンでQR登録（?pc=1）：同じ処理を3列で。画像をまとめてドラッグ → 1まいずつ ほぞんして つぎへ／スキップ
 import { db, uid, getFriendNames, rememberFriendName } from '../db.js';
-import { loadImage, decodeCanvas, guessParts, makeThumb, PARTS } from '../qr.js';
-import { h, fill, icon, header, toast, busy, fileButton, KIND } from '../ui.js';
+import { loadImage, decodeCanvas, guessParts, makeThumb, cropFriendPhoto, PARTS } from '../qr.js';
+import { h, fill, icon, header, toast, busy, fileButton, photoBox, KIND } from '../ui.js';
 import { syncNow, getSyncConfig, syncReady } from '../sync.js';
 import { openRange } from './range.js';
 import { openPicker } from './picker.js';
@@ -181,6 +181,29 @@ export default async function register(ctx) {
     return [h('h2', { class: 'sec-title' }, st.kind === 'coord' ? 'パーツのふりわけ' : '見つかったQR'), ...rows];
   }
 
+  // フレンド：カード画像から写真を切り出す（画像・QRが変わったときだけ作り直す）
+  let photoKey = null, photo = null;
+  function friendPhoto() {
+    const r = st.recs[0];
+    if (!st.canvas || !r) return null;
+    const key = `${st.imgUrl}|${r.box.x},${r.box.y},${r.box.w}`;
+    if (key !== photoKey) {
+      photoKey = key;
+      const c = cropFriendPhoto(st.canvas, r.box);
+      photo = c && { ...c, src: c.canvas.toDataURL('image/jpeg', 0.85) };
+    }
+    return photo;
+  }
+  function photoPreview() {
+    if (!st.canvas || !st.recs.length) return null;
+    const p = friendPhoto();
+    return h('div', { class: 'card photo-preview' },
+      p ? photoBox(p.src, 'とりこむ写真') : h('div', { class: 'photo-box thumb noimg' }, '写真なし'),
+      h('div', { class: 'body' },
+        h('strong', {}, p ? `写真（${p.wide ? 'よこ長' : 'たて長'}）` : '写真が見つからなかったよ'),
+        h('span', { class: 'muted' }, p ? 'いちらんでは まわりをぼかして きれいにおさめるよ' : 'フレンドカードの画像なら、写真のところを自動で切り出すよ')));
+  }
+
   function nameField() {
     const coordBtn = (label, val) => h('div', { class: 'search name-btn', role: 'button', tabindex: '0', onclick: async () => {
       const v = await openPicker({ current: val?.name || '', catalogId: val?.catalogId });
@@ -201,6 +224,7 @@ export default async function register(ctx) {
     if (st.kind === 'friend') {
       const dl = h('datalist', { id: 'friend-names' }, friendNames.map((n) => h('option', { value: n })));
       return [
+        photoPreview(),
         h('label', { class: 'field-label', for: 'fname' }, 'なまえ'),
         h('input', { id: 'fname', class: 'text-input', list: 'friend-names', value: st.friendName, placeholder: 'フレンドのなまえ', autocomplete: 'off',
           oninput: (e) => { st.friendName = e.target.value; } }),
@@ -235,6 +259,8 @@ export default async function register(ctx) {
         item.friendName = st.friendName.trim();
         item.name = item.friendName;
         item.nameSource = 'free';
+        const p = friendPhoto();
+        if (p) { item.photo = await new Promise((r) => p.canvas.toBlob(r, 'image/jpeg', 0.85)); item.photoWide = p.wide; }
         if (st.coord) Object.assign(item, { coordName: st.coord.name, coordNameSource: st.coord.nameSource, catalogId: st.coord.catalogId, dan: st.coord.dan, page: st.coord.page });
         await rememberFriendName(item.friendName);
       } else if (st.coord) {
