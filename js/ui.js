@@ -169,25 +169,26 @@ export function thumb(item, idx = 0, { noImgText = true } = {}) {
   return el;
 }
 
-// 一覧・コーデ名えらびの絞り込み：シリーズ（2種類以上あるときだけ）と だん の2段のチップ。
-// 絞り込みが変わると onChange() を呼ぶ。test(it) で当てはまるか判定する。extra() は だん の行の最後に足すチップ
+// 一覧・コーデ名えらびの絞り込み：シリーズ（2種類以上あるときだけ）と だん のプルダウンを横に1段。
+// （チップを並べると画面がせまくなるので、プルダウンにしている）
+// 絞り込みが変わると onChange() を呼ぶ。test(it) で当てはまるか判定する。extra() はその下の行に足すチップ
 export function danFilter(list, onChange, { extra = null } = {}) {
   const st = { series: 'all', dan: 'all' };
   const seriesHere = SERIES.filter(([k]) => list.some((it) => seriesOf(it) === k));
   const el = h('div', { class: 'dan-filter' });
-  const chip = (on, label, fn) => h('button', { class: 'chip' + (on ? ' on' : ''), onclick: () => { fn(); draw(); onChange(); } }, label);
+  const select = (label, value, opts, set) => h('select', { class: 'select', 'aria-label': label,
+    onchange: (e) => { set(e.target.value); draw(); onChange(); } },
+    opts.map(([v, l]) => h('option', { value: v, selected: String(value) === String(v) ? 'selected' : null }, l)));
   function draw() {
     const inSeries = list.filter((it) => st.series === 'all' || seriesOf(it) === st.series);
     const dans = [...new Set(inSeries.map((it) => it.dan).filter(Boolean))].sort((a, b) => b - a);
     if (st.dan !== 'all' && !dans.includes(st.dan)) st.dan = 'all';
+    const more = extra ? [extra()].flat(Infinity).filter(Boolean) : [];
     fill(el,
-      seriesHere.length > 1 ? h('div', { class: 'chips' },
-        chip(st.series === 'all', 'ぜんぶ', () => { st.series = 'all'; }),
-        ...seriesHere.map(([k, l]) => chip(st.series === k, l, () => { st.series = k; }))) : null,
-      h('div', { class: 'chips' },
-        chip(st.dan === 'all', seriesHere.length > 1 ? 'どのだんも' : 'ぜんぶ', () => { st.dan = 'all'; }),
-        dans.map((d) => chip(st.dan === d, `${d}だん`, () => { st.dan = d; })),
-        extra ? extra() : null));
+      h('div', { class: 'dan-selects' },
+        seriesHere.length > 1 ? select('シリーズ', st.series, [['all', 'シリーズ：ぜんぶ'], ...seriesHere], (v) => { st.series = v; }) : null,
+        dans.length ? select('だん', st.dan, [['all', 'だん：ぜんぶ'], ...dans.map((d) => [d, `${d}だん`])], (v) => { st.dan = v === 'all' ? 'all' : Number(v); }) : null),
+      more.length ? h('div', { class: 'chips' }, more) : null);
   }
   draw();
   return {

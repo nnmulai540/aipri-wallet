@@ -4,10 +4,12 @@ import { partLabel } from '../qr.js';
 import { h, fill, icon, go, header, thumb, nameClass, toast } from '../ui.js';
 
 export default async function playlist(ctx) {
-  const items = (await db.all('items')).filter((it) => it.kind !== 'save').sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+  // プレイリストに入れるのはコーデとチャンスコードだけ（フレンドは入れない）
+  const items = (await db.all('items')).filter((it) => it.kind === 'coord' || it.kind === 'chance').sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
   const map = new Map(items.map((it) => [it.id, it]));
   let ids = (await getPlaylist()).filter((id) => map.has(id));
   let q = '';
+  let addKind = 'coord'; // ついかの一覧：coord / chance をきりかえて出す
   let addOpen = ids.length === 0; // 空っぽのときは最初から開いておく
   let undoTimer = null;
   const root = h('div', { class: 'screen' });
@@ -34,7 +36,7 @@ export default async function playlist(ctx) {
           thumb(it, i, { noImgText: false }),
           h('div', { class: 'body' },
             h('div', { class: 'name ' + nameClass(it) }, it.name || '（なまえなし）'),
-            h('div', { class: 'meta' }, parts(it)))),
+            h('div', { class: 'meta' }, it.kind === 'chance' ? 'チャンスコード' : parts(it)))),
         h('button', { class: 'x', 'aria-label': 'はずす', onclick: () => remove(id) }, icon('close')),
         grip);
       dragSort(grip, row);
@@ -91,7 +93,7 @@ export default async function playlist(ctx) {
   }
 
   function drawAdd() {
-    const list = items.filter((it) => !q || (it.name || '').includes(q));
+    const list = items.filter((it) => it.kind === addKind && (!q || (it.name || '').includes(q)));
     addBox.replaceChildren(...(list.length ? list : []).map((it, i) => {
       const added = ids.includes(it.id);
       const t = thumb(it, i, { noImgText: false });
@@ -100,7 +102,7 @@ export default async function playlist(ctx) {
         : h('button', { class: 'plus', 'aria-label': `${it.name || ''} をついか`, onclick: async () => { ids.push(it.id); await commit(); drawRows(); drawAdd(); } }, icon('plus')));
       return h('div', { class: 'add-card' + (added ? ' is-added' : '') }, t, h('span', { class: 'name ' + nameClass(it) }, it.name || '（なまえなし）'));
     }));
-    if (!list.length) addBox.replaceChildren(h('div', { class: 'empty', style: 'grid-column:1/-1' }, items.length ? 'みつからなかったよ' : 'まだ登録がないよ'));
+    if (!list.length) addBox.replaceChildren(h('div', { class: 'empty', style: 'grid-column:1/-1' }, items.some((it) => it.kind === addKind) ? 'みつからなかったよ' : 'まだ登録がないよ'));
   }
 
   // 「コーデをついか」はふだんたたんでおき、押したときだけ検索と一覧を出す
@@ -109,6 +111,8 @@ export default async function playlist(ctx) {
       h('button', { class: 'add-toggle', 'aria-expanded': String(addOpen), onclick: () => { addOpen = !addOpen; drawAddSec(); } },
         icon(addOpen ? 'close' : 'plus'), addOpen ? 'ついかをとじる' : 'コーデをついか'),
       addOpen ? [
+        h('div', { class: 'seg' }, [['coord', 'コーデ'], ['chance', 'チャンスコード']].map(([k, l]) =>
+          h('button', { class: addKind === k ? 'on' : '', 'aria-pressed': String(addKind === k), onclick: () => { addKind = k; drawAddSec(); drawAdd(); } }, l))),
         h('div', { class: 'search' }, icon('search'), h('input', { type: 'search', placeholder: 'なまえでさがす', 'aria-label': 'なまえでさがす', value: q, oninput: (e) => { q = e.target.value.trim(); drawAdd(); } })),
         addBox,
       ] : null);

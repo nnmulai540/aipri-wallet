@@ -88,6 +88,9 @@ a { color: var(--main); }
 /* ---- チップ ---- */
 .chips { display: flex; gap: 8px; flex-wrap: wrap; }
 .dan-filter { display: flex; flex-direction: column; gap: 8px; }
+.dan-selects { display: flex; gap: 8px; }
+.dan-selects:empty { display: none; }
+.dan-selects .select { min-width: 0; min-height: 40px; font-size: 14px; }
 .chip {
   min-height: 40px; padding: 0 16px; border-radius: 999px;
   border: 2px solid var(--line); background: var(--white); color: var(--text);
@@ -298,6 +301,7 @@ a { color: var(--main); }
 .add-card.is-added .thumb img, .add-card.is-added .thumb .dress { opacity: .45; }
 .add-card .name { font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .add-sec { display: flex; flex-direction: column; gap: 12px; }
+.add-sec .seg { flex: none; }
 .add-toggle { min-height: 52px; border-radius: 20px; border: 2px dashed var(--line2); background: transparent; color: var(--main); font-size: 15px; display: flex; align-items: center; justify-content: center; gap: 6px; }
 .add-toggle svg { width: 18px; height: 18px; }
 .undo-bar {
